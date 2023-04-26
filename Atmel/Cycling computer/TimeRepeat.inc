@@ -19,7 +19,24 @@
 
  //Таймер на 40 мс - 25 раз в секунду срабатывает
  Evry_40_ms_Task:
-	
+	//Проверяем - мы двигаемся?
+	TSTFlag isMove
+	BRNE /*!=*/ Evry_40_ms_Task_not_move
+		//Мы едем. Значит пересчитываем все значения
+		//Средняя скорость = DIST * 60000 / TIME (V = S/T)
+		_LDI_A 60000
+		_MOV_32 B_32, Dist
+		_MUL64_A_R32 B_32
+		_MOV_32 B_32, TimeTrip
+		_DIV_64_A_DIV_R32 B_32
+		_MOV_32 AverageSpeed, ACC_1
+
+		//Максимальная текущая скорость
+		_MOV_32 B_32, TimeTrip
+		_LDI_A 60000
+		_DIV_64_A_DIV_R32 B_32
+
+	Evry_40_ms_Task_not_move:
 
 	SetTimerTask TS_Evry_40_ms_Task,40
  RET
