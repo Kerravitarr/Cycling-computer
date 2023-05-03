@@ -4,115 +4,150 @@
  *  Created: 25.11.2018 11:40:51
  *   Author: Terran
  */ 
+ 
+ //Очищает флаг регистра вывода. Эти флаги начинаются с O_
+ .MACRO COPin
+	.IF	@0 < 8
+		LDS MacroR,WordOut
+		ANDI MacroR, ~(1 << @0)
+		STS WordOut,MacroR       
+	.ELSE
+		LDS MacroR,WordOut+1
+		ANDI MacroR, ~(1 << (@0-8))
+		STS WordOut+1,MacroR   
+	.endif
+.ENDMACRO
+ //Тестирует флаг регистра вывода. Эти флаги начинаются с O_
+ .MACRO TST_OPin
+	.IF	@0 < 8
+		LDS MacroR,WordOut
+		ANDI MacroR, 1 << @0
+	.ELSE
+		LDS MacroR,WordOut+1
+		ANDI MacroR, 1 << (@0-8)
+	.endif
+ .ENDMACRO
+ //Сохраняет флаг регистра вывода. Эти флаги начинаются с O_
+ .MACRO SOPin
+	.IF	@0 < 8
+		LDS MacroR,WordOut
+		ORI MacroR, 1 << @0
+		STS WordOut,MacroR       
+	.ELSE
+		LDS MacroR,WordOut+1
+		ORI MacroR, 1 << (@0-8)
+		STS WordOut+1,MacroR   
+	.endif
+ .ENDMACRO
 
  O:		
-			PUSH 	ZL
-			PUSH 	ZH
-			PUSH 	word
-			PUSH 	Counter
+	PUSH 	ZL
+	PUSH 	ZH
+	PUSH 	word
+	PUSH 	Counter
 
-			LDI 	ZL,low(WordOut)
-			LDI 	ZH,high(WordOut)
-			ADIW	ZL,WordOutSize-1
+	LDI 	ZL,low(WordOut)
+	LDI 	ZH,high(WordOut)
+	ADIW	ZL,WordOutSize-1
 
 			
-			LDI 	Counter, WordOutSize
-			MOV		Counter2,Counter
-			LDI 	Counter, 8
+	LDI 	Counter, WordOutSize
+	MOV		Counter2,Counter
+	LDI 	Counter, 8
 
-			CLI
+	CLI
 
-			LD	 	word, Z
-			cbi		PORTD,6
-			O04:
-					cbi		PORTB,5
-					LSL		word
-					BRCS O01
-						cbi		PORTD,4
-						RJMP	O02
-					O01:
-						sbi		PORTD,4
-					O02:
-					sbi		PORTB,5
+	LD	 	word, Z
+	cbi		PORTD,6
+	O04:
+			cbi		PORTB,5
+			LSL		word
+			BRCS O01
+				cbi		PORTD,4
+				RJMP	O02
+			O01:
+				sbi		PORTD,4
+			O02:
+			sbi		PORTB,5
 
-					DEC		Counter
-				BRNE 	O04			;Прошли слово
+			DEC		Counter
+		BRNE 	O04			;Прошли слово
 
-				LD	 	word, -Z
-				DEC 	Counter2
-				LDI 	Counter, 8
-			BRNE 	O04			;Прошли фразу
-			SEI
+		LD	 	word, -Z
+		DEC 	Counter2
+		LDI 	Counter, 8
+	BRNE 	O04			;Прошли фразу
+	SEI
 			
-			cbi		PORTB,5		//Выключили пин 13
-			sbi		PORTD,6
+	cbi		PORTB,5		//Выключили пин 13
+	sbi		PORTD,6
 
-			pop 	Counter
-			pop 	word
-			pop 	ZH
-			pop 	ZL
+	pop 	Counter
+	pop 	word
+	pop 	ZH
+	pop 	ZL
 
 RET
 
 /**Функция появления прерывания со стороны ног входных сигналов*/
 I:		
-			PUSH 	ZL
-			PUSH 	ZH
-			PUSH 	word
-			PUSH 	Counter
-			PUSH 	OSRG
+	PUSH 	ZL
+	PUSH 	ZH
+	PUSH 	word
+	PUSH 	Counter
+	PUSH 	OSRG
 
-			LDI 	ZL,low(WordIn)
-			LDI 	ZH,high(WordIn)
-			DEC		Zl
-			DEC		Zl
+	LDI 	ZL,low(WordIn)
+	LDI 	ZH,high(WordIn)
+	DEC		Zl
+	DEC		Zl
 
 			
-			LDI 	Counter, WordInSize
-			MOV		Counter2,Counter
-			LDI 	Counter, 8
+	LDI 	Counter, WordInSize
+	MOV		Counter2,Counter
+	LDI 	Counter, 8
 
-			CLI
+	CLI
 
-			ANDI 	word, 0
-			cbi		PORTD,7
-			sbi		PORTD,7
-			Sbi		PORTB,1
-			I04:
-					cbi		PORTB,5
-					IN		OSRG,PIND
-					ANDI	OSRG,0b00100000
-					BRNE I01
-						RJMP	I02
-					I01:
-						ORI		word,1
-					I02:
+	ANDI 	word, 0
+	cbi		PORTD,7
+	sbi		PORTD,7
+	Sbi		PORTB,1
+	I04:
+			cbi		PORTB,5
+			IN		OSRG,PIND
+			ANDI	OSRG,0b00100000
+			BRNE I01
+				RJMP	I02
+			I01:
+				ORI		word,1
+			I02:
 
-					ROR		word
-					sbi		PORTB,5
-					DEC		Counter
-				BRNE 	I04			;Прошли слово
-				ROR		word
+			ROR		word
+			sbi		PORTB,5
+			DEC		Counter
+		BRNE 	I04			;Прошли слово
+		ROR		word
 
-				INC		ZL
-				INC		ZL
-				ST	 	Z,word
-				DEC 	Counter2
-				LDI 	Counter, 8
-			BRNE 	I04			;Прошли фразу
-			Cbi		PORTB,1
+		INC		ZL
+		INC		ZL
+		ST	 	Z,word
+		DEC 	Counter2
+		LDI 	Counter, 8
+	BRNE 	I04			;Прошли фразу
+	Cbi		PORTB,1
 			
 //			SetTask TS_SignalIn
 
-			LDI 	Counter, 1
-			OUT		EIFR,Counter
-			SEI
+	LDI 	Counter, 1
+	OUT		EIFR,Counter
+	SEI
 
-			pop 	OSRG
-			pop 	Counter
-			pop 	word
-			pop 	ZH
-			pop 	ZL
+	pop 	OSRG
+	pop 	Counter
+	pop 	word
+	pop 	ZH
+	pop 	ZL
 			
 RET
 
@@ -130,7 +165,7 @@ ReedSwitch_E:
 		//Обороты в минуту, потому что целочисленное деление
 		_LDI_A 60000
 		_DIV_64_A_DIV_R32 B_32
-		_MOV_32 Speed, ACC_1
+		_MOV_32 Speed, ACC_32
 	ReedSwitch_E_not_move:
 	_MOV_32 TimeVOld, B_32
 RET

@@ -21,24 +21,342 @@
  Evry_40_ms_Task:
 	//Проверяем - мы двигаемся?
 	TSTFlag isMove
-	BRNE /*!=*/ Evry_40_ms_Task_not_move
+	BREQ /*=*/ Evry_40_ms_Task_move
+		RJMP Evry_40_ms_Task_not_move
+	Evry_40_ms_Task_move:
 		//Мы едем. Значит пересчитываем все значения
-		//Средняя скорость = DIST * 60000 / TIME (V = S/T)
-		_LDI_A 60000
-		_MOV_32 B_32, Dist
-		_MUL64_A_R32 B_32
-		_MOV_32 B_32, TimeTrip
-		_DIV_64_A_DIV_R32 B_32
-		_MOV_32 AverageSpeed, ACC_1
 
-		//Максимальная текущая скорость
+		//Максимальная текущая скорость в ACC
 		_MOV_32 B_32, TimeTrip
 		_LDI_A 60000
 		_DIV_64_A_DIV_R32 B_32
+
+		_CP_32 ACC_32, Speed
+		BRSH /*>=*/ Evry_40_ms_Task_move_smal_v
+			//У нас текущая скорость ниже возможной
+			_MOV_32 Speed, ACC_32
+		Evry_40_ms_Task_move_smal_v:
+		
+		_LDI_A 10
+		_CP_32 Speed, ACC_32
+		BRSH /*>=*/ Evry_40_ms_Task_move_next
+			//Наша скорость меньше 10 оборотов в минуту. Мы считаем это остановкой!
+			CBIFlag isMove
+			_LDI_32 Speed, 0
+			_MOV_32 B_32, TimeTrip
+			_SUB_32 B_32, TimeVOld
+			_MOV_32 TimeTrip, TimeVOld
+			_SUB_32 TimeOdo, B_32
+		Evry_40_ms_Task_move_next:
+
+		//Теперь у нас есть скорость в оборотах/минуту. А нам что нужно? км/ч!
+		_CLR_64 ACC_1
+		_MOV_32 ACC_32, WheelLength
+		_MUL64_A_R32 Speed	//С * V = мм/минуту
+		_MOV_64 BC_64, ACC_1
+		_LDI_A 60 / 100000
+		_MUL64_A_R64 BC_64 //A = C * V * 60 / 100000 = 10 * км/ч
+		_MOV_32 B_32, ACC_32
+		_LDI_A 10
+		_DIV_64_R32_DIV_A B_32 //Мы делим Speed на 10. Получаем в итоге скорость + её десятую часть.
+								//ACC_32 теперь содержит скорость
+								//ACC_2 содержит число после запятой
+		LDS tmp2, ACC_2 + 7
+		ADI tmp2, '0'
+		STS LSD_ROW_2 + 4, tmp2
+		//Теперь единицы
+		_MOV_32 B_32, ACC_32
+		_LDI_A 10
+		_DIV_64_R32_DIV_A B_32 
+		LDS tmp2, ACC_2 + 7
+		CPI tmp2, 0
+		BRNE /*!=*/ Evry_40_ms_Task_move_num2_not0
+			//Цифра 0
+			STI LSD_ROW_1 + 2, 0x8
+			STI LSD_ROW_1 + 3, 0x1
+			STI LSD_ROW_2 + 2, 0x7
+			STI LSD_ROW_2 + 3, 0x2
+			RJMP Evry_40_ms_Task_move_num2_end
+		Evry_40_ms_Task_move_num2_not0:
+		CPI tmp2, 1
+		BRNE /*!=*/ Evry_40_ms_Task_move_num2_not1
+			STI LSD_ROW_1 + 2, 0x1
+			STI LSD_ROW_1 + 3, ' '
+			STI LSD_ROW_2 + 2, 0x2
+			STI LSD_ROW_2 + 3, 0x4
+			RJMP Evry_40_ms_Task_move_num2_end
+		Evry_40_ms_Task_move_num2_not1:
+		CPI tmp2, 2
+		BRNE /*!=*/ Evry_40_ms_Task_move_num2_not2
+			STI LSD_ROW_1 + 2, 0x3
+			STI LSD_ROW_1 + 3, 0x5
+			STI LSD_ROW_2 + 2, 0x6
+			STI LSD_ROW_2 + 3, 0x4
+			RJMP Evry_40_ms_Task_move_num2_end
+		Evry_40_ms_Task_move_num2_not2:
+		CPI tmp2, 3
+		BRNE /*!=*/ Evry_40_ms_Task_move_num2_not3
+			STI LSD_ROW_1 + 2, 0x3
+			STI LSD_ROW_1 + 3, 0x5
+			STI LSD_ROW_2 + 2, 0x4
+			STI LSD_ROW_2 + 3, 0x5
+			RJMP Evry_40_ms_Task_move_num2_end
+		Evry_40_ms_Task_move_num2_not3:
+		CPI tmp2, 4
+		BRNE /*!=*/ Evry_40_ms_Task_move_num2_not4
+			STI LSD_ROW_1 + 2, 0x7
+			STI LSD_ROW_1 + 3, 0x2
+			STI LSD_ROW_2 + 2, ' '
+			STI LSD_ROW_2 + 3, 0x1
+			RJMP Evry_40_ms_Task_move_num2_end
+		Evry_40_ms_Task_move_num2_not4:
+		CPI tmp2, 5
+		BRNE /*!=*/ Evry_40_ms_Task_move_num2_not5
+			STI LSD_ROW_1 + 2, 0x6
+			STI LSD_ROW_1 + 3, 0x3
+			STI LSD_ROW_2 + 2, 0x4
+			STI LSD_ROW_2 + 3, 0x5
+			RJMP Evry_40_ms_Task_move_num2_end
+		Evry_40_ms_Task_move_num2_not5:
+		CPI tmp2, 6
+		BRNE /*!=*/ Evry_40_ms_Task_move_num2_not6
+			STI LSD_ROW_1 + 2, 0x6
+			STI LSD_ROW_1 + 3, 0x3
+			STI LSD_ROW_2 + 2, 0x6
+			STI LSD_ROW_2 + 3, 0x5
+			RJMP Evry_40_ms_Task_move_num2_end
+		Evry_40_ms_Task_move_num2_not6:
+		CPI tmp2, 7
+		BRNE /*!=*/ Evry_40_ms_Task_move_num2_not7
+			STI LSD_ROW_1 + 2, 0x3
+			STI LSD_ROW_1 + 3, 0x1
+			STI LSD_ROW_2 + 2, ' '
+			STI LSD_ROW_2 + 3, 0x8
+			RJMP Evry_40_ms_Task_move_num2_end
+		Evry_40_ms_Task_move_num2_not7:
+		CPI tmp2, 8
+		BRNE /*!=*/ Evry_40_ms_Task_move_num2_not8
+			STI LSD_ROW_1 + 2, 0x6
+			STI LSD_ROW_1 + 3, 0x5
+			STI LSD_ROW_2 + 2, 0x7
+			STI LSD_ROW_2 + 3, 0x2
+			RJMP Evry_40_ms_Task_move_num2_end
+		Evry_40_ms_Task_move_num2_not8:
+		CPI tmp2, 9
+		BRNE /*!=*/ Evry_40_ms_Task_move_num2_not9
+			STI LSD_ROW_1 + 2, 0x6
+			STI LSD_ROW_1 + 3, 0x5
+			STI LSD_ROW_2 + 2, 0x4
+			STI LSD_ROW_2 + 3, 0x2
+			RJMP Evry_40_ms_Task_move_num2_end
+		Evry_40_ms_Task_move_num2_not9:
+
+		Evry_40_ms_Task_move_num2_end:
+
+		//Теперь десятки
+		LDS tmp2, ACC_1 + 7
+		CPI tmp2, 0
+		BRNE /*!=*/ Evry_40_ms_Task_move_num1_not0
+			//Цифра 0
+			STI LSD_ROW_1 + 0, 0x8
+			STI LSD_ROW_1 + 1, 0x1
+			STI LSD_ROW_2 + 0, 0x7
+			STI LSD_ROW_2 + 1, 0x2
+			RJMP Evry_40_ms_Task_move_num1_end
+		Evry_40_ms_Task_move_num1_not0:
+		CPI tmp2, 1
+		BRNE /*!=*/ Evry_40_ms_Task_move_num1_not1
+			STI LSD_ROW_1 + 0, 0x1
+			STI LSD_ROW_1 + 1, ' '
+			STI LSD_ROW_2 + 0, 0x2
+			STI LSD_ROW_2 + 1, 0x4
+			RJMP Evry_40_ms_Task_move_num1_end
+		Evry_40_ms_Task_move_num1_not1:
+		CPI tmp2, 2
+		BRNE /*!=*/ Evry_40_ms_Task_move_num1_not2
+			STI LSD_ROW_1 + 0, 0x3
+			STI LSD_ROW_1 + 1, 0x5
+			STI LSD_ROW_2 + 0, 0x6
+			STI LSD_ROW_2 + 1, 0x4
+			RJMP Evry_40_ms_Task_move_num1_end
+		Evry_40_ms_Task_move_num1_not2:
+		CPI tmp2, 3
+		BRNE /*!=*/ Evry_40_ms_Task_move_num1_not3
+			STI LSD_ROW_1 + 0, 0x3
+			STI LSD_ROW_1 + 1, 0x5
+			STI LSD_ROW_2 + 0, 0x4
+			STI LSD_ROW_2 + 1, 0x5
+			RJMP Evry_40_ms_Task_move_num1_end
+		Evry_40_ms_Task_move_num1_not3:
+		CPI tmp2, 4
+		BRNE /*!=*/ Evry_40_ms_Task_move_num1_not4
+			STI LSD_ROW_1 + 0, 0x7
+			STI LSD_ROW_1 + 1, 0x2
+			STI LSD_ROW_2 + 0, ' '
+			STI LSD_ROW_2 + 1, 0x1
+			RJMP Evry_40_ms_Task_move_num1_end
+		Evry_40_ms_Task_move_num1_not4:
+		CPI tmp2, 5
+		BRNE /*!=*/ Evry_40_ms_Task_move_num1_not5
+			STI LSD_ROW_1 + 0, 0x6
+			STI LSD_ROW_1 + 1, 0x3
+			STI LSD_ROW_2 + 0, 0x4
+			STI LSD_ROW_2 + 1, 0x5
+			RJMP Evry_40_ms_Task_move_num1_end
+		Evry_40_ms_Task_move_num1_not5:
+		CPI tmp2, 6
+		BRNE /*!=*/ Evry_40_ms_Task_move_num1_not6
+			STI LSD_ROW_1 + 0, 0x6
+			STI LSD_ROW_1 + 1, 0x3
+			STI LSD_ROW_2 + 0, 0x6
+			STI LSD_ROW_2 + 1, 0x5
+			RJMP Evry_40_ms_Task_move_num1_end
+		Evry_40_ms_Task_move_num1_not6:
+		CPI tmp2, 7
+		BRNE /*!=*/ Evry_40_ms_Task_move_num1_not7
+			STI LSD_ROW_1 + 0, 0x3
+			STI LSD_ROW_1 + 1, 0x1
+			STI LSD_ROW_2 + 0, ' '
+			STI LSD_ROW_2 + 1, 0x8
+			RJMP Evry_40_ms_Task_move_num1_end
+		Evry_40_ms_Task_move_num1_not7:
+		CPI tmp2, 8
+		BRNE /*!=*/ Evry_40_ms_Task_move_num1_not8
+			STI LSD_ROW_1 + 0, 0x6
+			STI LSD_ROW_1 + 1, 0x5
+			STI LSD_ROW_2 + 0, 0x7
+			STI LSD_ROW_2 + 1, 0x2
+			RJMP Evry_40_ms_Task_move_num1_end
+		Evry_40_ms_Task_move_num1_not8:
+		CPI tmp2, 9
+		BRNE /*!=*/ Evry_40_ms_Task_move_num1_not9
+			STI LSD_ROW_1 + 0, 0x6
+			STI LSD_ROW_1 + 1, 0x5
+			STI LSD_ROW_2 + 0, 0x4
+			STI LSD_ROW_2 + 1, 0x2
+			RJMP Evry_40_ms_Task_move_num1_end
+		Evry_40_ms_Task_move_num1_not9:
+
+		Evry_40_ms_Task_move_num1_end:
 
 	Evry_40_ms_Task_not_move:
 
 	SetTimerTask TS_Evry_40_ms_Task,40
+ RET
+ 
+ //Таймер на каждую секунду. Тут выполняются всякие не интересные операции
+ Evry_1_s_Task:
+	//Средняя скорость = DIST * 60000 / TIME (V = S/T)
+	_LDI_A 60000
+	_MOV_32 B_32, Dist
+	_MUL64_A_R32 B_32
+	_MOV_32 B_32, TimeTrip
+	_DIV_64_A_DIV_R32 B_32
+	_MOV_32 AverageSpeed, ACC_32
+
+	//Проверим как там со скростью дела
+	_LDI_A 0
+	_CP_32 Speed, ACC_32
+	BRNE /*!=*/ Evry_1_s_Task_speed_not_0
+		STI LSD_ROW_1 + 4, 'X'	//Когда скорость 0, мы сюда крест ставим
+		RJMP Evry_1_s_Task_speed_end
+	Evry_1_s_Task_speed_not_0:
+		_CP_32 Speed, AverageSpeed
+		BRLO /*<*/ Evry_1_s_Task_speed_high
+			STI LSD_ROW_1 + 4, '-'	//Когда скорость меньше
+			RJMP Evry_1_s_Task_speed_end
+		Evry_1_s_Task_speed_high:
+			STI LSD_ROW_1 + 4, '+'	//Когда скорость больше
+	Evry_1_s_Task_speed_end:
+
+	_MOV_32 B_32, TimeTrip
+	_LDI_A 10
+	_DIV_64_R32_DIV_A B_32 //Мы делим TimeTrip на 10. Получаем в итоге десятки секунд + сами секунды
+	LDS tmp2, ACC_2 + 7
+	ADI tmp2, '0'
+	STS LSD_ROW_3 + 7, tmp2
+	_MOV_32 B_32, ACC_32
+	_LDI_A 6
+	_DIV_64_R32_DIV_A B_32 //Теперь минуты и десятки секунд
+	LDS tmp2, ACC_2 + 7
+	ADI tmp2, '0'
+	STS LSD_ROW_3 + 6, tmp2
+	STI LSD_ROW_3 + 5, ':'
+	_MOV_32 B_32, ACC_32
+	_LDI_A 10
+	_DIV_64_R32_DIV_A B_32 //Теперь десятки минут и минуты
+	LDS tmp2, ACC_2 + 7
+	ADI tmp2, '0'
+	STS LSD_ROW_3 + 4, tmp2
+	_MOV_32 B_32, ACC_32
+	_LDI_A 6
+	_DIV_64_R32_DIV_A B_32
+	LDS tmp2, ACC_2 + 7
+	ADI tmp2, '0'
+	STS LSD_ROW_3 + 3, tmp2
+	STI LSD_ROW_3 + 2, ':'
+	_MOV_32 B_32, ACC_32
+	_LDI_A 10
+	_DIV_64_R32_DIV_A B_32 //Теперь десятки минут и минуты
+	LDS tmp2, ACC_2 + 7
+	ADI tmp2, '0'
+	STS LSD_ROW_3 + 1, tmp2
+	LDS tmp2, ACC_1 + 7
+	ADI tmp2, '0'
+	STS LSD_ROW_3 + 0, tmp2
+
+	//Теперь одометр
+	_CLR_64 ACC_1
+	_MOV_32 ACC_32, Dist
+	_MUL64_A_R32 WheelLength	//Количество оборотов на длину колеса - расстояние, в мм
+	_LDI_32 B_32, 1000
+	_DIV_64_A_DIV_R32 B_32	//Теперь путь в метрах
+	_MOV_32 B_32, ACC_32
+
+	_LDI_A 10
+	_DIV_64_R32_DIV_A B_32
+	LDS tmp2, ACC_2 + 7
+	ADI tmp2, '0'
+	STS LSD_ROW_4 + 6, tmp2
+	_MOV_32 B_32, ACC_32
+
+	_LDI_A 10
+	_DIV_64_R32_DIV_A B_32
+	LDS tmp2, ACC_2 + 7
+	ADI tmp2, '0'
+	STS LSD_ROW_4 + 5, tmp2
+	_MOV_32 B_32, ACC_32
+	
+	_LDI_A 10
+	_DIV_64_R32_DIV_A B_32
+	LDS tmp2, ACC_2 + 7
+	ADI tmp2, '0'
+	STS LSD_ROW_4 + 4, tmp2
+	STI LSD_ROW_3 + 3, '.'
+	_MOV_32 B_32, ACC_32
+
+	_LDI_A 10
+	_DIV_64_R32_DIV_A B_32
+	LDS tmp2, ACC_2 + 7
+	ADI tmp2, '0'
+	STS LSD_ROW_4 + 2, tmp2
+	_MOV_32 B_32, ACC_32
+
+	_LDI_A 10
+	_DIV_64_R32_DIV_A B_32
+	LDS tmp2, ACC_2 + 7
+	ADI tmp2, '0'
+	STS LSD_ROW_4 + 1, tmp2
+	_MOV_32 B_32, ACC_32
+
+	_LDI_A 10
+	_DIV_64_R32_DIV_A B_32
+	LDS tmp2, ACC_2 + 7
+	ADI tmp2, '0'
+	STS LSD_ROW_4 + 0, tmp2
+	_MOV_32 B_32, ACC_32
+	
+	SetTimerTask TS_Evry_1_s_Task,1000
  RET
 
 

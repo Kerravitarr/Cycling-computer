@@ -8,54 +8,54 @@
  ; Output Compare 2 interrupt 
 ; Main Timer Service - Служба Таймеров Ядра РТОС - Обработчик прерывания
 OutComp2Int:
-			PUSH 	OSRG
-			in 		OSRG,SREG			; Save Sreg
-			PUSH 	OSRG				; Сохранение регистра OSRG и регистра состояния SREG
+			in 		interrupt,SREG			; Save Sreg
+			PUSH 	interrupt				; Сохранение регистра OSRG и регистра состояния SREG
 
 			PUSH 	ZL	
-			PUSH 	ZH					; сохранение Регистра Z
-			PUSH 	Counter				; сохранение Регистра Counter
+			PUSH 	ZH						; сохранение Регистра Z
+			PUSH 	Counter					; сохранение Регистра Counter
+			PUSH 	MacroR					; сохранение Регистра MacroR
 	
-			LDI 	ZL,low(TimersPool)	; Загрузка с регистр Z адреса RAM, 
-			LDI 	ZH,high(TimersPool); по которому находится информация о таймерах
+			LDI 	ZL,low(TimersPool)		; Загрузка с регистр Z адреса RAM, 
+			LDI 	ZH,high(TimersPool)		; по которому находится информация о таймерах
 
-			LDI 	Counter,TimersPoolSize ; максимальное количество таймеров
+			LDI 	Counter,TimersPoolSize	; максимальное количество таймеров
 	
-Comp1L01:	ld 		OSRG,Z				; OSRG = [Z] ; Получить номер события
-			cpi 	OSRG,$FF			; Проверить на "NOP"
-			breq 	Comp1L03			; Если NOP то переход к следующей позиции
+Comp1L01:	ld 		interrupt,Z				; interrupt = [Z] ; Получить номер события
+			cpi 	interrupt,$FF			; Проверить на "NOP"
+			breq 	Comp1L03				; Если NOP то переход к следующей позиции
 
-			clt							; Флаг T используется для сохранения информации об окончании счёта
-			ldd 	OSRG,Z+1			; 
-			subi 	OSRG,Low(1) 		; Уменьшение младшей части счётчика на 1
-			std 	Z+1,OSRG			;
-			breq 	Comp1L02			; Если 0 то флаг T не устанавливаем
-			set							; 
+			clt								; Флаг T используется для сохранения информации об окончании счёта
+			ldd 	interrupt,Z+1			; 
+			subi 	interrupt,Low(1) 		; Уменьшение младшей части счётчика на 1
+			std 	Z+1,interrupt			;
+			breq 	Comp1L02				; Если 0 то флаг T не устанавливаем
+			set								; 
 
-Comp1L02:	ldd 	OSRG,Z+2			;
-			sbci 	OSRG,High(1) 		; Уменьшение старшей части счётчика на 1
-			std 	Z+2,OSRG			;
-			brne 	Comp1L03			; Счёт не окончен
-			brts 	Comp1L03			; Счёт не окончен (по T)	
+Comp1L02:	ldd 	interrupt,Z+2			;
+			sbci 	interrupt,High(1) 		; Уменьшение старшей части счётчика на 1
+			std 	Z+2,interrupt			;
+			brne 	Comp1L03				; Счёт не окончен
+			brts 	Comp1L03				; Счёт не окончен (по T)	
 	
-			ld 		OSRG,Z				; Получить номер события
-			CALL 	SendTask			; послать в системную очередь задач
+			ld 		MacroR,Z				; Получить номер события
+			CALL 	SendTask				; послать в системную очередь задач
 	
-			LDI 	OSRG,$FF			; = NOP (задача выполнена, таймер самоудаляется)
-			st 		Z, OSRG				; Clear Event
+			LDI 	interrupt,$FF			; = NOP (задача выполнена, таймер самоудаляется)
+			st 		Z, interrupt			; Clear Event
 
-Comp1L03:	subi 	ZL,Low(-3)			; Skip Counter
-			sbci 	ZH,High(-3)			; Z+=3 - переход к следующему таймеру
-			dec 	Counter				; счетчик таймеров
-			brne 	Comp1L01			; Loop	
+Comp1L03:	subi 	ZL,Low(-3)				; Skip Counter
+			sbci 	ZH,High(-3)				; Z+=3 - переход к следующему таймеру
+			dec 	Counter					; счетчик таймеров
+			brne 	Comp1L01				; Loop	
 
-			pop 	Counter				; восстанавливаем переменные
+			pop 	MacroR					; восстанавливаем переменные
+			pop 	Counter					; 
 			pop 	ZH
 			pop 	ZL
 
-			pop 	OSRG				; Восстанавливаем регистры
-			out 	SREG,OSRG			; 
-			pop 	OSRG
+			pop 	interrupt				; Восстанавливаем регистры
+			out 	SREG,interrupt			; 
 RETI						; выходим из прерывания
 
 /**Прерывание по появлению входных данных*/

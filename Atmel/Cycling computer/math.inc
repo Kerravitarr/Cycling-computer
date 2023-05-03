@@ -31,76 +31,104 @@ MOV_M:
 	BRNE CLRA64_00
  RET
 
-COM_M:
-	COM_32_00:
-		LD	MacroR,X
-		COM MacroR
-		ST	X+, MacroR
-		DEC	Counter
-	BRNE COM_32_00
- RET
-
  //Прибавляет к числу разрядом Counter 1
+ //Xh:Xl - число
  INC_M:
 	PUSH	tmp3
 	CLR		tmp3
+	ADIW X,1	//Так как у нас в памяти числа идут от старшего разряда к младшему...
 	//Прибавляемая единица
 	SEC
 	INC_32_M_00:
-		LD	MacroR,X
+		LD	MacroR,-X
 		//А вот тут мы складываем с 0 и с С. На первом шаге С будет, на последнем... Как знать
 		ADC	tmp2,tmp3
-		ST	X+, MacroR
+		ST	X, MacroR
 		DEC	Counter
 	BRNE INC_32_M_00
 	POP		tmp3
  RET
-;=============================================================================
-;=============================================================================
-;=============================================================================
-;=============================================================================
- LPM_Z_To_X_Counter:
- 		LPM_Z_To_X_Counter_00:
-			LPM		tmp2,Z+
-			ST		X+,tmp2
-			DEC	Counter
-		BRNE LPM_Z_To_X_Counter_00
- RET
+
+ //Складывает два числа
+ //Yh:Yl += Xh:Xl 
+ //MacroR - длина числа
+ //Использует 
+ ADD_M:
+	PUSH	tmp3
+	PUSH	tmp2
+		CLR		tmp3
+		ADIW X,1	//Так как у нас в памяти числа идут от старшего разряда к младшему...
+		ADIW Y,1
+		CLC
+		
+		ADD_M_00:
+			LD	tmp2,-Y
+			LD	tmp3,-X
+			ADC	tmp2,tmp3
+			ST	Y,tmp2
+			DEC	MacroR
+		BRNE ADD_M_00
+
+	POP		tmp2
+	POP		tmp3
+ RET	
+
+ //Вычитает два числа
+ //Yh:Yl += Xh:Xl 
+ //MacroR - длина числа
+ //Использует 
+SUB_M:
+	PUSH	tmp3
+	PUSH	tmp2
+		CLR		tmp3
+		ADIW X,1	//Так как у нас в памяти числа идут от старшего разряда к младшему...
+		ADIW Y,1
+		CLC
+		
+		SUB_M_00:
+			LD	tmp2,-Y
+			LD	tmp3,-X
+			SBC	tmp2,tmp3
+			ST	Y,tmp2
+			DEC	MacroR
+		BRNE SUB_M_00
+
+	POP		tmp2
+	POP		tmp3
+ RET	
+
 ;=============================================================================
 ;=============================================================================
 ;=============================================================================
 ;=============================================================================
 
-//Загрузка двубайтного числа в 4 бита. Два параметра - адрес ячейки и число  @0=@1
-.MACRO		LDI_16
-	PUSH	Counter
-
+//Загрузка числа в 32-х разрядный регистр. Два параметра - адрес ячейки и число  @0=@1
+.MACRO		LDI_32
+	//Очищаем
 	LDI		Counter,4
    	LDI 	XL,low(@0)
 	LDI 	XH,high(@0)
-	RCALL	CLR_M
-	 
-	LDI	MacroR,low(@1)
-	STS	@0+3,MacroR	
-	LDI	MacroR,high(@1)
-	STS	@0+2,MacroR
-
-	POP		Counter
+	CALL	CLR_M
+   	.IF	@0 <= 0xFF
+		LDI	MacroR,@0
+		STS	@0+3,MacroR
+	.ELSE
+   		.IF	@0 <= 0xFFFF
+			LDI	MacroR,low(@0)
+			STS	@0+3,MacroR	
+			LDI	MacroR,high(@0)
+			STS	@0+2,MacroR
+		.ELSE
+      		.error "Аругмент не может быть больше 2х байт!"
+   		.endif
+   	.endif
 .ENDMACRO
-
-//Загрузка однобайтного числа в 4 бита. Два параметра - адрес ячейки и число @0=@1
-.MACRO		LDI_8
+.MACRO		_LDI_32  
 	PUSH	XL     
 	PUSH	XH  
 	PUSH	Counter
 
-	LDI		Counter,4
-   	LDI 	XL,low(@0)
-	LDI 	XH,high(@0)
-	RCALL	CLR_M
-
-	LDI	MacroR,@1
-	STS	@0+3,MacroR
+	LDI_32 @0,@1
 
 	POP		Counter
 	POP		XH
@@ -124,7 +152,27 @@ COM_M:
 			LDI	MacroR,high(@0)
 			STS	ACC_1+6,MacroR
 		.ELSE
-      		.error "Аругмент не может быть больше 2х байт!"
+   			.IF	@0 <= 0xFFFFFF
+				LDI	MacroR,low(@0)
+				STS	ACC_1+7,MacroR	
+				LDI	MacroR,high(@0)
+				STS	ACC_1+6,MacroR
+				LDI	MacroR,low(@0 / 0xFFFF)
+				STS	ACC_1+5,MacroR	
+			.ELSE
+   				.IF	@0 <= 0xFFFFFFFF
+					LDI	MacroR,low(@0)
+					STS	ACC_1+7,MacroR	
+					LDI	MacroR,high(@0)
+					STS	ACC_1+6,MacroR
+					LDI	MacroR,low(@0 / 0xFFFF)
+					STS	ACC_1+5,MacroR	
+					LDI	MacroR,high(@0 / 0xFFFF)
+					STS	ACC_1+4,MacroR	
+				.ELSE
+      				.error "Аругмент не может быть больше 4ых байт!"
+   				.endif
+   			.endif
    		.endif
    	.endif
 .ENDMACRO
@@ -146,7 +194,7 @@ COM_M:
 	LDI		Counter,4
    	LDI 	XL,low(@0)
 	LDI 	XH,high(@0)
-	RCALL	CLR_M
+	CALL	CLR_M
 .ENDMACRO
 .MACRO		CLR_32
 	PUSH	XL     
@@ -164,7 +212,7 @@ COM_M:
 	LDI		Counter,8
    	LDI 	XL,low(@0)
 	LDI 	XH,high(@0)
-	RCALL	CLR_M
+	CALL	CLR_M
 .ENDMACRO
 .MACRO		CLR_64
 	PUSH	XL     
@@ -208,7 +256,7 @@ COM_M:
 	LDI 	XH,high(@0)
    	LDI 	YL,low(@1)
 	LDI 	YH,high(@1)
-	RCALL	MOV_M
+	CALL	MOV_M
 .ENDMACRO
 .MACRO		MOV_32
 	PUSH	XL     
@@ -244,6 +292,50 @@ COM_M:
 	_MOV_64 @0,@1
 
 	POP		Counter
+	POP		YH
+	POP		YL
+	POP		XH
+	POP		XL
+.ENDMACRO
+
+//Сравнивает два 4х разрядных числа. CP @0, @1
+.MACRO		_CP_32
+	LDS	MacroR, @0 + 3
+	LDS	tmp2,	@1 + 3
+	CP MacroR, tmp2
+	LDS	MacroR, @0 + 2
+	LDS	tmp2,	@1 + 2
+	CPC MacroR, tmp2
+	LDS	MacroR, @0 + 1
+	LDS	tmp2,	@1 + 1
+	CPC MacroR, tmp2
+	LDS	MacroR, @0 + 0
+	LDS	tmp2,	@1 + 0
+	CPC MacroR, tmp2
+.ENDMACRO
+.MACRO		CP_32
+	PUSH	tmp2
+
+	_CP_32 @0,@1
+
+	POP		tmp2
+.ENDMACRO
+
+//Вычитает из одной ячейки памяти в другую 32х разрядные числа. @0-=@1
+.MACRO		_SUB_32
+	LDI		MacroR,4
+	LDIW	Y, @0
+	LDIW	X, @1
+	RCALL	SUB_M
+.ENDMACRO
+.MACRO		SUB_32
+	PUSH	XL     
+	PUSH	XH  
+	PUSH	YL     
+	PUSH	YH  
+
+	_SUB_32 @0,@1
+
 	POP		YH
 	POP		YL
 	POP		XH
