@@ -119,7 +119,7 @@ Init_Scrin:
 	CPI word, LSD_M_KEY_WS1
 	BRNE /*!=*/ LCD_init_not_key_ws1
 		LDI tmp3, (0 << 3)
-		LDIW Z, LCD_BIG_NUMBER_1*2
+		LDIW Z, LCD_BIG_NUMBER_0*2
 		RCALL LCD_INIT_WRITE_CHAR
 		LDS tmp2, LSD_ROW_P
 		TST tmp2
@@ -133,7 +133,7 @@ Init_Scrin:
 	CPI word, LSD_M_KEY_WS2
 	BRNE /*!=*/ LCD_init_not_key_ws2
 		LDI tmp3, (1 << 3)
-		LDIW Z, LCD_BIG_NUMBER_2*2
+		LDIW Z, LCD_BIG_NUMBER_1*2
 		RCALL LCD_INIT_WRITE_CHAR
 		LDS tmp2, LSD_ROW_P
 		TST tmp2
@@ -147,7 +147,7 @@ Init_Scrin:
 	CPI word, LSD_M_KEY_WS3
 	BRNE /*!=*/ LCD_init_not_key_ws3
 		LDI tmp3, (2 << 3)
-		LDIW Z, LCD_BIG_NUMBER_3*2
+		LDIW Z, LCD_BIG_NUMBER_2*2
 		RCALL LCD_INIT_WRITE_CHAR
 		LDS tmp2, LSD_ROW_P
 		TST tmp2
@@ -161,7 +161,7 @@ Init_Scrin:
 	CPI word, LSD_M_KEY_WS4
 	BRNE /*!=*/ LCD_init_not_key_ws4
 		LDI tmp3, (3 << 3)
-		LDIW Z, LCD_BIG_NUMBER_4*2
+		LDIW Z, LCD_BIG_NUMBER_3*2
 		RCALL LCD_INIT_WRITE_CHAR
 		LDS tmp2, LSD_ROW_P
 		TST tmp2
@@ -175,7 +175,7 @@ Init_Scrin:
 	CPI word, LSD_M_KEY_WS5
 	BRNE /*!=*/ LCD_init_not_key_ws5
 		LDI tmp3, (4 << 3)
-		LDIW Z, LCD_BIG_NUMBER_5*2
+		LDIW Z, LCD_BIG_NUMBER_4*2
 		RCALL LCD_INIT_WRITE_CHAR
 		LDS tmp2, LSD_ROW_P
 		TST tmp2
@@ -189,7 +189,7 @@ Init_Scrin:
 	CPI word, LSD_M_KEY_WS6
 	BRNE /*!=*/ LCD_init_not_key_ws6
 		LDI tmp3, (5 << 3)
-		LDIW Z, LCD_BIG_NUMBER_6*2
+		LDIW Z, LCD_BIG_NUMBER_5*2
 		RCALL LCD_INIT_WRITE_CHAR
 		LDS tmp2, LSD_ROW_P
 		TST tmp2
@@ -203,7 +203,7 @@ Init_Scrin:
 	CPI word, LSD_M_KEY_WS7
 	BRNE /*!=*/ LCD_init_not_key_ws7
 		LDI tmp3, (6 << 3)
-		LDIW Z, LCD_BIG_NUMBER_7*2
+		LDIW Z, LCD_BIG_NUMBER_6*2
 		RCALL LCD_INIT_WRITE_CHAR
 		LDS tmp2, LSD_ROW_P
 		TST tmp2
@@ -215,15 +215,56 @@ Init_Scrin:
 		RJMP Init_Scrin_end
 	LCD_init_not_key_ws7:
 	CPI word, LSD_M_KEY_WS8
-	BRNE /*!=*/ LCD_init_not_key_ws8
+	BREQ /*=*/ LCD_init_key_ws8 
+		RJMP LCD_init_not_key_ws8
+	LCD_init_key_ws8:
 		LDI tmp3, (7 << 3)
-		LDIW Z, LCD_BIG_NUMBER_8*2
+		LDIW Z, LCD_BIG_NUMBER_7*2
 		RCALL LCD_INIT_WRITE_CHAR
 		LDS tmp2, LSD_ROW_P
 		TST tmp2
 		BRNE /*!=*/ LCD_init_key_ws8_not_end
 			//Закончили с этим режимом
 			STI LSD_mode, LSD_M_READY
+			//Очищаем экран
+			LDI tmp2, ' '
+			LDI Counter, LSD_ROW_LENGHT
+			LDIW Z, LSD_ROW_1
+			LCD_init_ready_clean_rw1:
+				ST Z+, tmp2
+				DEC Counter
+			BRNE /*!=*/ LCD_init_ready_clean_rw1
+			LDI Counter, LSD_ROW_LENGHT
+			LDIW Z, LSD_ROW_2
+			LCD_init_ready_clean_rw2:
+				ST Z+, tmp2
+				DEC Counter
+			BRNE /*!=*/ LCD_init_ready_clean_rw2
+			LDI Counter, LSD_ROW_LENGHT
+			LDIW Z, LSD_ROW_3
+			LCD_init_ready_clean_rw3:
+				ST Z+, tmp2
+				DEC Counter
+			BRNE /*!=*/ LCD_init_ready_clean_rw3
+			LDI Counter, LSD_ROW_LENGHT
+			LDIW Z, LSD_ROW_4
+			LCD_init_ready_clean_rw4:
+				ST Z+, tmp2
+				DEC Counter
+			BRNE /*!=*/ LCD_init_ready_clean_rw4
+			//Загружаем символы скорости. Они генятся при движении, так что надо загрузить заранее
+			//Цифра 0
+			STI LSD_ROW_1 + 0, 0x7
+			STI LSD_ROW_1 + 1, 0x0
+			STI LSD_ROW_2 + 0, 0x6
+			STI LSD_ROW_2 + 1, 0x1
+			//Цифра 0
+			STI LSD_ROW_1 + 2, 0x7
+			STI LSD_ROW_1 + 3, 0x0
+			STI LSD_ROW_2 + 2, 0x6
+			STI LSD_ROW_2 + 3, 0x1
+			
+			STI LSD_ROW_2 + 4, '0'
 			RJMP Init_Scrin_end_ready
 		LCD_init_key_ws8_not_end:
 		RJMP Init_Scrin_end
@@ -306,6 +347,8 @@ LCD_update:
 			STI LSD_mode, LSD_M_S1R
 			SetScrinKeyWord LCD_SETDDRAMADDR | LCD_ROW1_ADR
 		LCD_update_ready_oldMode_end:
+		//Начинаем печать строки
+		STI LSD_ROW_P, 0
 		//Даём время подумать
 		SetTimerTask TS_LCD_update,1
 		RET

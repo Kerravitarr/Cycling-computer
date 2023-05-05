@@ -33,7 +33,7 @@ Comp1L01:	ld 		interrupt,Z				; interrupt = [Z] ; Получить номер с
 			set								; 
 
 Comp1L02:	ldd 	interrupt,Z+2			;
-			sbci 	interrupt,High(1) 		; Уменьшение старшей части счётчика на 1
+			sbci 	interrupt,High(1)  		; Уменьшение старшей части счётчика на 1
 			std 	Z+2,interrupt			;
 			brne 	Comp1L03				; Счёт не окончен
 			brts 	Comp1L03				; Счёт не окончен (по T)	
@@ -44,8 +44,7 @@ Comp1L02:	ldd 	interrupt,Z+2			;
 			LDI 	interrupt,$FF			; = NOP (задача выполнена, таймер самоудаляется)
 			st 		Z, interrupt			; Clear Event
 
-Comp1L03:	subi 	ZL,Low(-3)				; Skip Counter
-			sbci 	ZH,High(-3)				; Z+=3 - переход к следующему таймеру
+Comp1L03:	ADIW Z, 3						; Z+=3 - переход к следующему таймеру
 			dec 	Counter					; счетчик таймеров
 			brne 	Comp1L01				; Loop	
 
@@ -60,11 +59,19 @@ RETI						; выходим из прерывания
 
 /**Прерывание по появлению входных данных*/
 DataIN:
-	SetTask TS_I
+	in 		interrupt,SREG			; Save Sreg
+	PUSH	MacroR
+	InteraptSetTask TS_I
+	POP 	MacroR					; восстанавливаем переменные
+	out 	SREG,interrupt			; Восстанавливаем регистры
 RETI
 /**Сработал Геркон*/
 ReedSwitch:
-	SetTask TS_ReedSwitch_E
+	in 		interrupt,SREG			; Save Sreg
+	PUSH	MacroR
+	InteraptSetTask TS_ReedSwitch_E
+	POP 	MacroR					; восстанавливаем переменные
+	out 	SREG,interrupt			; Восстанавливаем регистры
 RETI
 
 ;-----------------------------------------------------------------------------
@@ -104,7 +111,7 @@ TWI_Event:
 		CPI	interrupt,0x20			//SLA+W+NACK Мы отправили адрес с битом записи, а нас послали NACK. Обидно, сгенерим ошибку или повторим еще раз.
 		BRNE	TWIE20
 				//Обработка
-				SetTask TS_TWI_IO_Error
+				InteraptSetTask TS_TWI_IO_Error
 				RJMP TWIE_SEND_STOP
 		TWIE20:
 
@@ -128,7 +135,7 @@ TWI_Event:
 				UOUT	TWDR,interrupt //Передаём слово
 				RJMP	TWIE_SEND_ACK
 			TWIE2802:
-				SetTask TS_TWI_IO_End
+				InteraptSetTask TS_TWI_IO_End
 			RJMP TWIE_SEND_STOP
 		TWIE28:
 /*
@@ -178,7 +185,7 @@ TWI_Event:
 				CPI		interrupt,TWISize
 				BRNE /*!=*/ TWIE_SEND_ACK //Всё ок, место есть
 					//Проблемка, это был последний. Надо что то сделать, срочно. Или будет беда
-					SetTask TS_TWI_IO_End		
+					InteraptSetTask TS_TWI_IO_End		
 			RJMP TWIE_SEND_ACK
 		TWIE50:
 
@@ -329,7 +336,7 @@ UARTCaddr:
 		PUSH	MacroR
 		LDS	interrupt,UDR0		; Взяли число
 		STS UART_I,interrupt
-		SetTask TS_UART_End
+		InteraptSetTask TS_UART_End
 		POP 	MacroR
 RETI
 

@@ -78,7 +78,7 @@ Flag_2:		.byte 1							;Флаги из памяти
 			.equ 	isMove			= 2				; Флаг движения. Если тут 1 - мы куда-то едем
 
 
-			.equ 	TaskQueueSize	= 20			; Размер очереди событий
+			.equ 	TaskQueueSize	= 30			; Размер очереди событий
 TaskQueue: 	.byte 	TaskQueueSize 					; Адрес очереди сотытий в SRAM
 
 			.equ 	TimersPoolSize	= 20			; Количество таймеров
@@ -204,8 +204,6 @@ LCD_display_mode:.byte 1							;Режим отображения экрана
 			.equ BME250Write			= (0b1110110<<1)|0	; //Адрес и бит квитирования для записи для датчика BME250
 			.equ BME250Read				= (0b1110110<<1)|1	; //Адрес и бит квитирования для чтения для датчика BME250
 
-			.equ ScrinKeyClear			= 0b1				;Команда очистки экрана
-
 ;===========CSEG==============================================================
 			; Собственно код начинается отсюда
 			.include "vectors.inc"
@@ -246,7 +244,47 @@ Flush:		ST 		Z+,R16
 			DEC	ZL			; Уменьшая адрес
 			ST	Z, ZH		; Записываем в регистр 0
 			BRNE	PC-2	; Пока не перебрали все не успокоились
+			
+			//Отладочный скрипт!!!
+			/*LDIW Y, Flag_2
 
+			PRINT_ADR Flag_2
+			PRINT_ADR WordIn
+				PRINT_ADR ACC_1
+				PRINT_ADR ACC_2
+			PRINT_ADR ACC_32
+			PRINT_ADR B_32
+				PRINT_ADR C_32
+				PRINT_ADR BC_64
+			PRINT_ADR D_32
+			PRINT_ADR E_32
+				PRINT_ADR DE_64
+				PRINT_ADR WheelLength
+			PRINT_ADR TimeOdo
+			PRINT_ADR Odometr
+				PRINT_ADR MaxSpeedOdo
+				PRINT_ADR TimeTrip
+			PRINT_ADR TimeVOld
+			PRINT_ADR Dist
+				PRINT_ADR Speed
+				PRINT_ADR AverageSpeed
+			PRINT_ADR MaxSpeed
+			PRINT_ADR Kaden
+				PRINT_ADR KadenMax
+				PRINT_ADR KadenAverage
+			PRINT_ADR LeftTimeDist
+			PRINT_ADR Degrees
+				PRINT_ADR Height
+				PRINT_ADR Clock
+			PRINT_ADR AccLevel
+			PRINT_ADR Temperature
+				PRINT_ADR Pressure
+				PRINT_ADR Humidity
+			
+			JMP Reset
+			PRINT_ADR_F: 
+				PRINT_ALL_ADR_FUN
+			RET/**/
 
 ;==================================================================================
 ; Init RTOS
@@ -256,12 +294,15 @@ Flush:		ST 		Z+,R16
 ; Инициализация периферии
 ;----------------------------------------------------------------------------------	
 			SBI	DDRD,4						;Установили 4 ногу на выход		данные на выход
-			CBI	DDRD,6						;Установили 5 ногу на вход		данные извне
+			CBI	DDRD,5						;Установили 5 ногу на вход		данные извне
 			SBI	DDRD,6						;Установили 6 ногу на выход		обновление выхода
 			SBI	DDRD,7						;Установили 7 ногу на выход		запоминание состояний входа
 			SBI	DDRB,0						;Установили 8 ногу на выход		режим сна
 			SBI	DDRB,1						;Установили 9 ногу на выход		запрет обновления регистра сравнения
 			SBI	DDRB,5						;Установили 13 ногу на выход	строб
+			CBI	DDRD,3						;Установили 3 ногу на вход		геркон
+
+			
 
 			//Инициализируем переменные в памяти
 			RCALL InitMemory
@@ -273,6 +314,8 @@ Flush:		ST 		Z+,R16
 			SetTask TS_Evry_1_s_Task
 			//Запустить медленный таймер. Каждые 60 секунд, или 1 минуту один тик. Всего на 65535 минут таймер
 			SetTimerTask TS_SlowTimerService,60000 
+
+			_LDI_32 WheelLength, 2000
 
 Background: SetTask TS_Init_Scrin		//Инициализируем дисплей
 			SetTimerTask TS_LCD_update,1000	//Через секунду начнём обновлять данные
@@ -405,14 +448,14 @@ LampSymbol:				.DB	0b00000000, 0b00100000, 0b01000000, 0b01100100, 0b10000000, 0
 SpeakerSymbol:			.DB	0b00000010, 0b00100110, 0b01011010, 0b01110010, 0b10011010, 0b10100110, 0b11000010, 0b11100000
 
 //Символы больших цифр для экрана:
-LCD_BIG_NUMBER_1:		.DB 0b00000,0b00000,0b11100,0b11100,0b11100,0b11100,0b11100,0b11100
-LCD_BIG_NUMBER_2:		.DB 0b11100,0b11100,0b11100,0b11100,0b11100,0b11100,0b00000,0b00000
-LCD_BIG_NUMBER_3:		.DB 0b00000,0b00000,0b11111,0b11111,0b11111,0b11111,0b11111,0b11111
-LCD_BIG_NUMBER_4:		.DB 0b11111,0b11111,0b11111,0b11111,0b11111,0b11111,0b00000,0b00000
-LCD_BIG_NUMBER_5:		.DB 0b00000,0b00000,0b11100,0b11100,0b11100,0b11100,0b00000,0b00000
-LCD_BIG_NUMBER_6:		.DB 0b00000,0b00000,0b00111,0b00111,0b00111,0b00111,0b00000,0b00000
-LCD_BIG_NUMBER_7:		.DB 0b00111,0b00111,0b00111,0b00111,0b00111,0b00111,0b00000,0b00000
-LCD_BIG_NUMBER_8:		.DB 0b00000,0b00000,0b00111,0b00111,0b00111,0b00111,0b00111,0b00111
+LCD_BIG_NUMBER_0:		.DB 0b11111,0b11111,0b00011,0b00011,0b00011,0b00011,0b00011,0b00011	// ┒
+LCD_BIG_NUMBER_1:		.DB 0b00011,0b00011,0b00011,0b00011,0b00011,0b00011,0b11111,0b11111 // _|
+LCD_BIG_NUMBER_2:		.DB 0b11111,0b11111,0b00000,0b00000,0b00000,0b00000,0b00000,0b00000 // ▔
+LCD_BIG_NUMBER_3:		.DB 0b00000,0b00000,0b00000,0b00000,0b00000,0b00000,0b11111,0b11111 //_
+LCD_BIG_NUMBER_4:		.DB 0b11111,0b11111,0b00011,0b00011,0b00011,0b00011,0b11111,0b11111	//ɔ
+LCD_BIG_NUMBER_5:		.DB 0b11111,0b11111,0b11000,0b11000,0b11000,0b11000,0b11111,0b11111	//с
+LCD_BIG_NUMBER_6:		.DB 0b11000,0b11000,0b11000,0b11000,0b11000,0b11000,0b11111,0b11111	// |_
+LCD_BIG_NUMBER_7:		.DB 0b11111,0b11111,0b11000,0b11000,0b11000,0b11000,0b11000,0b11000 // Г
 
 
 

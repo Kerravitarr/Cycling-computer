@@ -77,3 +77,63 @@
 	UOUT 	UCSR0B, tmp2	
 
 .ENDMACRO
+
+
+/**
+	Специальный отладочный марос. Его основная задача - вывести адреса переменных в память
+*/
+//Чисто печатает адрес
+.MACRO PRINT_ALL_ADR_FUN
+	//Непосредственно печатает адрес
+	//Адрес в регистре Z
+	CLR_32 B_32
+	STS B_32 + 3, Zh
+	_LDI_A 16
+	_DIV_64_R32_DIV_A B_32
+	LDS tmp2, ACC_2 + 7
+	CPI tmp2, 10
+	BRSH /*>=*/ PRINT_ADR_hex_mode_S
+		ADI tmp2, '0'
+		RJMP PRINT_ADR_hex_mode_end
+	PRINT_ADR_hex_mode_S:
+		ADI tmp2, 'A' - 10	
+	PRINT_ADR_hex_mode_end:
+	STD Y + 1, tmp2
+	LDS tmp2, ACC_1 + 7
+	CPI tmp2, 10
+	BRSH /*>=*/ PRINT_ADR_hex_mode_F
+		ADI tmp2, '0'
+		RJMP PRINT_ADR_hex_mode_endF
+	PRINT_ADR_hex_mode_F:
+		ADI tmp2, 'A' - 10	
+	PRINT_ADR_hex_mode_endF:
+	STD Y + 0, tmp2
+		
+	STS B_32 + 3, Zl
+	_LDI_A 16
+	_DIV_64_R32_DIV_A B_32
+	LDS tmp2, ACC_2 + 7
+	CPI tmp2, 10
+	BRSH /*>=*/ PRINT_ADR_hex_mode_S2
+		ADI tmp2, '0'
+		RJMP PRINT_ADR_hex_mode_end2
+	PRINT_ADR_hex_mode_S2:
+		ADI tmp2, 'A' - 10	
+	PRINT_ADR_hex_mode_end2:
+	STD Y + 3, tmp2
+	LDS tmp2, ACC_1 + 7
+	CPI tmp2, 10
+	BRSH /*>=*/ PRINT_ADR_hex_mode_F2
+		ADI tmp2, '0'
+		RJMP PRINT_ADR_hex_mode_endF2
+	PRINT_ADR_hex_mode_F2:
+		ADI tmp2, 'A' - 10	
+	PRINT_ADR_hex_mode_endF2:
+	STD Y + 2, tmp2
+
+	ADIW Yl, 8
+.ENDMACRO
+.MACRO PRINT_ADR
+	LDIW Z,@0
+	RCALL PRINT_ADR_F
+.ENDMACRO

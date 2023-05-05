@@ -24,9 +24,15 @@
  .ENDMACRO
  //Сохраняет флаг в памяти
  .MACRO SBIFlag
-	LDS MacroR,Flag
+	.IF	@0 < 8
+		LDS MacroR,Flag_2
 	ORI MacroR, (1 << @0)
-	STS Flag,MacroR
+		STS Flag_2,MacroR       
+	.ELSE
+		LDS MacroR,Flag_2+1
+		ORI MacroR, (1 << (@0 - 8))
+		STS Flag_2+1,MacroR   
+	.endif
  .ENDMACRO
 
  .MACRO 	OUTI				; Ёто описание макроса. ¬езде где outi встретитс¤ в коде, то замен¤етс¤ на 

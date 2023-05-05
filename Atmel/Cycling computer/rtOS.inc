@@ -6,7 +6,15 @@
  */ 
  
 ;==========================================================================
+//Добавляет задачу в очередь
 .MACRO SetTask
+		cli
+		ldi MacroR, @0			; Обращение к процедуре через событийный диспетчер
+		call SendTask			; 
+		sei
+.ENDMACRO
+//Добавляет задачу в очередь, это не безопасная функция. Она может вызываться только из прерывания!!!
+.MACRO InteraptSetTask
 		ldi MacroR, @0			; Обращение к процедуре через событийный диспетчер
 		call SendTask			; 
 .ENDMACRO
@@ -74,7 +82,7 @@ ProcessTaskQueue:
 PTQL02:	ret	
 
 ;-------------------------------------------------------------------------
-; OSRG - Event
+; MacroR - Event
 SendTask:
 	push 	ZL
 	push 	ZH
@@ -85,7 +93,6 @@ SendTask:
 	ldi 	ZH,high(TaskQueue)
 
 	ldi 	Counter, TaskQueueSize ;Длину этой очереди
-
 	SEQL01: 
 		ld 		tmp2, Z+	;Переходим к событию
 		cpi 	tmp2, $FF	;Если оно FF - то тут уже пустота, сюда и сохраним
@@ -97,8 +104,9 @@ SendTask:
 
 		dec 	Counter		; А если нет, то ещё один шажок
 	BRNE /*!=*/	SEQL01		; Если очередь переполнена, то выходим
+	JMP Reset	//И уматываем отсюда в перезагрузку
 
-	SEQL03:					; EXIT
+	SEQL03:					; EXIT	
 	pop 	tmp2
 	pop 	Counter
 	pop 	ZH
@@ -129,8 +137,7 @@ SetTimer:
 			rjmp	STL06		; Exit
 		STL02:
 	
-		subi 	ZL, Low(-3)	; Skip Counter
-		sbci 	ZH, High(-3)	; Z+=3
+		ADIW Z,3			; Z+=3
 
 		dec 	Counter		;
 	BRNE /*!=*/ STL01 //Всё ищем и ищем
@@ -149,10 +156,10 @@ SetTimer:
 			std 	Z+2, XH
 			RJMP STL06
 		STL05:	
-		subi 	ZL, Low(-3)	; Skip Counter
-		sbci 	ZH, High(-3)	; Z+=3
+		ADIW Z,3			; Z+=3
 		dec 	Counter		;
 	BRNE /*!=*/ STL04
+	JMP Reset	//И уматываем отсюда в перезагрузку
 
 	STL06:
 	pop 	Counter

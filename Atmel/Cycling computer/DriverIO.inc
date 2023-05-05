@@ -156,18 +156,26 @@ ReedSwitch_E:
 	_INC_32 Dist
 	_INC_32 Odometr
 	_MOV_32 B_32, TimeTrip
+	_MOV_32 C_32, TimeTrip
 	
 	//Проверяем - мы двигаемся?
 	TSTFlag isMove
-	BRNE /*!=*/ ReedSwitch_E_not_move
+	BREQ /*=*/ ReedSwitch_E_not_move
 		//Тогда находим нашу мгновенную скорость
 		//Мы знаем время оборота в мс или мс/оборот, а нужно в скорость перевести - оборотв/мин. Поэтому надо 60'000 / T 
 		//Обороты в минуту, потому что целочисленное деление
-		_LDI_A 60000
-		_DIV_64_A_DIV_R32 B_32
-		_MOV_32 Speed, ACC_32
+		_CP_32 B_32, TimeVOld
+		BREQ /*=*/ ReedSwitch_E_max_V
+			_LDI_A 60000
+			_SUB_32 B_32, TimeVOld
+			_DIV_64_A_DIV_R32 B_32
+			_MOV_32 Speed, ACC_32
+			RJMP ReedSwitch_E_not_move
+		ReedSwitch_E_max_V:
+			_LDI_32 Speed, 999
 	ReedSwitch_E_not_move:
-	_MOV_32 TimeVOld, B_32
+	SBIFlag isMove
+	_MOV_32 TimeVOld, C_32
 RET
 
 

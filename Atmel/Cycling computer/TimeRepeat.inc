@@ -9,7 +9,7 @@
  Evry_1_ms_Task:
 	//Проверяем - мы двигаемся?
 	TSTFlag isMove
-	BRNE /*!=*/ Evry_1_ms_Task_not_move
+	BREQ /*=*/ Evry_1_ms_Task_not_move
 		_INC_32 TimeOdo
 		_INC_32 TimeTrip
 	Evry_1_ms_Task_not_move:
@@ -21,13 +21,19 @@
  Evry_40_ms_Task:
 	//Проверяем - мы двигаемся?
 	TSTFlag isMove
-	BREQ /*=*/ Evry_40_ms_Task_move
+	BRNE /*!=*/ Evry_40_ms_Task_move
 		RJMP Evry_40_ms_Task_not_move
 	Evry_40_ms_Task_move:
 		//Мы едем. Значит пересчитываем все значения
 
 		//Максимальная текущая скорость в ACC
 		_MOV_32 B_32, TimeTrip
+		_CP_32 B_32, TimeVOld
+		BRNE /*!=*/ Evry_40_ms_Task_not_zeroDiv
+			//У нас косяк. Эти два числа не могут быть равными. Чтобы не поплыть как ржавй крейсер - сбрасываем
+			RJMP Evry_40_ms_Task_not_move
+		Evry_40_ms_Task_not_zeroDiv:
+		_SUB_32 B_32, TimeVOld
 		_LDI_A 60000
 		_DIV_64_A_DIV_R32 B_32
 
@@ -37,8 +43,8 @@
 			_MOV_32 Speed, ACC_32
 		Evry_40_ms_Task_move_smal_v:
 		
-		_LDI_A 10
-		_CP_32 Speed, ACC_32
+		_LDI_32 B_32, 10
+		_CP_32 ACC_32, B_32
 		BRSH /*>=*/ Evry_40_ms_Task_move_next
 			//Наша скорость меньше 10 оборотов в минуту. Мы считаем это остановкой!
 			CBIFlag isMove
@@ -54,8 +60,11 @@
 		_MOV_32 ACC_32, WheelLength
 		_MUL64_A_R32 Speed	//С * V = мм/минуту
 		_MOV_64 BC_64, ACC_1
-		_LDI_A 60 / 100000
-		_MUL64_A_R64 BC_64 //A = C * V * 60 / 100000 = 10 * км/ч
+		_LDI_A 60
+		_MUL64_A_R64 BC_64 //A = C * V * 60  = мм/ч
+		_MOV_64 BC_64, ACC_1
+		_LDI_A 100000
+		_DIV_64_R64_DIV_A BC_64 //A = C * V / 100000 = 10 * км/мин
 		_MOV_32 B_32, ACC_32
 		_LDI_A 10
 		_DIV_64_R32_DIV_A B_32 //Мы делим Speed на 10. Получаем в итоге скорость + её десятую часть.
@@ -72,82 +81,82 @@
 		CPI tmp2, 0
 		BRNE /*!=*/ Evry_40_ms_Task_move_num2_not0
 			//Цифра 0
-			STI LSD_ROW_1 + 2, 0x8
-			STI LSD_ROW_1 + 3, 0x1
-			STI LSD_ROW_2 + 2, 0x7
-			STI LSD_ROW_2 + 3, 0x2
+			STI LSD_ROW_1 + 2, 0x7
+			STI LSD_ROW_1 + 3, 0x0
+			STI LSD_ROW_2 + 2, 0x6
+			STI LSD_ROW_2 + 3, 0x1
 			RJMP Evry_40_ms_Task_move_num2_end
 		Evry_40_ms_Task_move_num2_not0:
 		CPI tmp2, 1
 		BRNE /*!=*/ Evry_40_ms_Task_move_num2_not1
-			STI LSD_ROW_1 + 2, 0x1
+			STI LSD_ROW_1 + 2, 0x0
 			STI LSD_ROW_1 + 3, ' '
-			STI LSD_ROW_2 + 2, 0x2
-			STI LSD_ROW_2 + 3, 0x4
+			STI LSD_ROW_2 + 2, 0x1
+			STI LSD_ROW_2 + 3, 0x3
 			RJMP Evry_40_ms_Task_move_num2_end
 		Evry_40_ms_Task_move_num2_not1:
 		CPI tmp2, 2
 		BRNE /*!=*/ Evry_40_ms_Task_move_num2_not2
-			STI LSD_ROW_1 + 2, 0x3
-			STI LSD_ROW_1 + 3, 0x5
-			STI LSD_ROW_2 + 2, 0x6
-			STI LSD_ROW_2 + 3, 0x4
+			STI LSD_ROW_1 + 2, 0x2
+			STI LSD_ROW_1 + 3, 0x4
+			STI LSD_ROW_2 + 2, 0x5
+			STI LSD_ROW_2 + 3, 0x3
 			RJMP Evry_40_ms_Task_move_num2_end
 		Evry_40_ms_Task_move_num2_not2:
 		CPI tmp2, 3
 		BRNE /*!=*/ Evry_40_ms_Task_move_num2_not3
-			STI LSD_ROW_1 + 2, 0x3
-			STI LSD_ROW_1 + 3, 0x5
-			STI LSD_ROW_2 + 2, 0x4
-			STI LSD_ROW_2 + 3, 0x5
+			STI LSD_ROW_1 + 2, 0x2
+			STI LSD_ROW_1 + 3, 0x4
+			STI LSD_ROW_2 + 2, 0x3
+			STI LSD_ROW_2 + 3, 0x4
 			RJMP Evry_40_ms_Task_move_num2_end
 		Evry_40_ms_Task_move_num2_not3:
 		CPI tmp2, 4
 		BRNE /*!=*/ Evry_40_ms_Task_move_num2_not4
-			STI LSD_ROW_1 + 2, 0x7
-			STI LSD_ROW_1 + 3, 0x2
+			STI LSD_ROW_1 + 2, 0x6
+			STI LSD_ROW_1 + 3, 0x1
 			STI LSD_ROW_2 + 2, ' '
-			STI LSD_ROW_2 + 3, 0x1
+			STI LSD_ROW_2 + 3, 0x0
 			RJMP Evry_40_ms_Task_move_num2_end
 		Evry_40_ms_Task_move_num2_not4:
 		CPI tmp2, 5
 		BRNE /*!=*/ Evry_40_ms_Task_move_num2_not5
-			STI LSD_ROW_1 + 2, 0x6
-			STI LSD_ROW_1 + 3, 0x3
-			STI LSD_ROW_2 + 2, 0x4
-			STI LSD_ROW_2 + 3, 0x5
+			STI LSD_ROW_1 + 2, 0x5
+			STI LSD_ROW_1 + 3, 0x2
+			STI LSD_ROW_2 + 2, 0x3
+			STI LSD_ROW_2 + 3, 0x4
 			RJMP Evry_40_ms_Task_move_num2_end
 		Evry_40_ms_Task_move_num2_not5:
 		CPI tmp2, 6
 		BRNE /*!=*/ Evry_40_ms_Task_move_num2_not6
-			STI LSD_ROW_1 + 2, 0x6
-			STI LSD_ROW_1 + 3, 0x3
-			STI LSD_ROW_2 + 2, 0x6
-			STI LSD_ROW_2 + 3, 0x5
+			STI LSD_ROW_1 + 2, 0x5
+			STI LSD_ROW_1 + 3, 0x2
+			STI LSD_ROW_2 + 2, 0x5
+			STI LSD_ROW_2 + 3, 0x4
 			RJMP Evry_40_ms_Task_move_num2_end
 		Evry_40_ms_Task_move_num2_not6:
 		CPI tmp2, 7
 		BRNE /*!=*/ Evry_40_ms_Task_move_num2_not7
-			STI LSD_ROW_1 + 2, 0x3
-			STI LSD_ROW_1 + 3, 0x1
+			STI LSD_ROW_1 + 2, 0x2
+			STI LSD_ROW_1 + 3, 0x0
 			STI LSD_ROW_2 + 2, ' '
-			STI LSD_ROW_2 + 3, 0x8
+			STI LSD_ROW_2 + 3, 0x7
 			RJMP Evry_40_ms_Task_move_num2_end
 		Evry_40_ms_Task_move_num2_not7:
 		CPI tmp2, 8
 		BRNE /*!=*/ Evry_40_ms_Task_move_num2_not8
-			STI LSD_ROW_1 + 2, 0x6
-			STI LSD_ROW_1 + 3, 0x5
-			STI LSD_ROW_2 + 2, 0x7
-			STI LSD_ROW_2 + 3, 0x2
+			STI LSD_ROW_1 + 2, 0x5
+			STI LSD_ROW_1 + 3, 0x4
+			STI LSD_ROW_2 + 2, 0x6
+			STI LSD_ROW_2 + 3, 0x1
 			RJMP Evry_40_ms_Task_move_num2_end
 		Evry_40_ms_Task_move_num2_not8:
 		CPI tmp2, 9
 		BRNE /*!=*/ Evry_40_ms_Task_move_num2_not9
-			STI LSD_ROW_1 + 2, 0x6
-			STI LSD_ROW_1 + 3, 0x5
-			STI LSD_ROW_2 + 2, 0x4
-			STI LSD_ROW_2 + 3, 0x2
+			STI LSD_ROW_1 + 2, 0x5
+			STI LSD_ROW_1 + 3, 0x4
+			STI LSD_ROW_2 + 2, 0x3
+			STI LSD_ROW_2 + 3, 0x1
 			RJMP Evry_40_ms_Task_move_num2_end
 		Evry_40_ms_Task_move_num2_not9:
 
@@ -158,82 +167,82 @@
 		CPI tmp2, 0
 		BRNE /*!=*/ Evry_40_ms_Task_move_num1_not0
 			//Цифра 0
-			STI LSD_ROW_1 + 0, 0x8
-			STI LSD_ROW_1 + 1, 0x1
-			STI LSD_ROW_2 + 0, 0x7
-			STI LSD_ROW_2 + 1, 0x2
+			STI LSD_ROW_1 + 0, 0x7
+			STI LSD_ROW_1 + 1, 0x0
+			STI LSD_ROW_2 + 0, 0x6
+			STI LSD_ROW_2 + 1, 0x1
 			RJMP Evry_40_ms_Task_move_num1_end
 		Evry_40_ms_Task_move_num1_not0:
 		CPI tmp2, 1
 		BRNE /*!=*/ Evry_40_ms_Task_move_num1_not1
-			STI LSD_ROW_1 + 0, 0x1
+			STI LSD_ROW_1 + 0, 0x0
 			STI LSD_ROW_1 + 1, ' '
-			STI LSD_ROW_2 + 0, 0x2
-			STI LSD_ROW_2 + 1, 0x4
+			STI LSD_ROW_2 + 0, 0x1
+			STI LSD_ROW_2 + 1, 0x3
 			RJMP Evry_40_ms_Task_move_num1_end
 		Evry_40_ms_Task_move_num1_not1:
 		CPI tmp2, 2
 		BRNE /*!=*/ Evry_40_ms_Task_move_num1_not2
-			STI LSD_ROW_1 + 0, 0x3
-			STI LSD_ROW_1 + 1, 0x5
-			STI LSD_ROW_2 + 0, 0x6
-			STI LSD_ROW_2 + 1, 0x4
+			STI LSD_ROW_1 + 0, 0x2
+			STI LSD_ROW_1 + 1, 0x4
+			STI LSD_ROW_2 + 0, 0x5
+			STI LSD_ROW_2 + 1, 0x3
 			RJMP Evry_40_ms_Task_move_num1_end
 		Evry_40_ms_Task_move_num1_not2:
 		CPI tmp2, 3
 		BRNE /*!=*/ Evry_40_ms_Task_move_num1_not3
-			STI LSD_ROW_1 + 0, 0x3
-			STI LSD_ROW_1 + 1, 0x5
-			STI LSD_ROW_2 + 0, 0x4
-			STI LSD_ROW_2 + 1, 0x5
+			STI LSD_ROW_1 + 0, 0x2
+			STI LSD_ROW_1 + 1, 0x4
+			STI LSD_ROW_2 + 0, 0x3
+			STI LSD_ROW_2 + 1, 0x4
 			RJMP Evry_40_ms_Task_move_num1_end
 		Evry_40_ms_Task_move_num1_not3:
 		CPI tmp2, 4
 		BRNE /*!=*/ Evry_40_ms_Task_move_num1_not4
-			STI LSD_ROW_1 + 0, 0x7
-			STI LSD_ROW_1 + 1, 0x2
+			STI LSD_ROW_1 + 0, 0x6
+			STI LSD_ROW_1 + 1, 0x1
 			STI LSD_ROW_2 + 0, ' '
-			STI LSD_ROW_2 + 1, 0x1
+			STI LSD_ROW_2 + 1, 0x0
 			RJMP Evry_40_ms_Task_move_num1_end
 		Evry_40_ms_Task_move_num1_not4:
 		CPI tmp2, 5
 		BRNE /*!=*/ Evry_40_ms_Task_move_num1_not5
-			STI LSD_ROW_1 + 0, 0x6
-			STI LSD_ROW_1 + 1, 0x3
-			STI LSD_ROW_2 + 0, 0x4
-			STI LSD_ROW_2 + 1, 0x5
+			STI LSD_ROW_1 + 0, 0x5
+			STI LSD_ROW_1 + 1, 0x2
+			STI LSD_ROW_2 + 0, 0x3
+			STI LSD_ROW_2 + 1, 0x4
 			RJMP Evry_40_ms_Task_move_num1_end
 		Evry_40_ms_Task_move_num1_not5:
 		CPI tmp2, 6
 		BRNE /*!=*/ Evry_40_ms_Task_move_num1_not6
-			STI LSD_ROW_1 + 0, 0x6
-			STI LSD_ROW_1 + 1, 0x3
-			STI LSD_ROW_2 + 0, 0x6
-			STI LSD_ROW_2 + 1, 0x5
+			STI LSD_ROW_1 + 0, 0x5
+			STI LSD_ROW_1 + 1, 0x2
+			STI LSD_ROW_2 + 0, 0x5
+			STI LSD_ROW_2 + 1, 0x4
 			RJMP Evry_40_ms_Task_move_num1_end
 		Evry_40_ms_Task_move_num1_not6:
 		CPI tmp2, 7
 		BRNE /*!=*/ Evry_40_ms_Task_move_num1_not7
-			STI LSD_ROW_1 + 0, 0x3
-			STI LSD_ROW_1 + 1, 0x1
+			STI LSD_ROW_1 + 0, 0x2
+			STI LSD_ROW_1 + 1, 0x0
 			STI LSD_ROW_2 + 0, ' '
-			STI LSD_ROW_2 + 1, 0x8
+			STI LSD_ROW_2 + 1, 0x7
 			RJMP Evry_40_ms_Task_move_num1_end
 		Evry_40_ms_Task_move_num1_not7:
 		CPI tmp2, 8
 		BRNE /*!=*/ Evry_40_ms_Task_move_num1_not8
-			STI LSD_ROW_1 + 0, 0x6
-			STI LSD_ROW_1 + 1, 0x5
-			STI LSD_ROW_2 + 0, 0x7
-			STI LSD_ROW_2 + 1, 0x2
+			STI LSD_ROW_1 + 0, 0x5
+			STI LSD_ROW_1 + 1, 0x4
+			STI LSD_ROW_2 + 0, 0x6
+			STI LSD_ROW_2 + 1, 0x1
 			RJMP Evry_40_ms_Task_move_num1_end
 		Evry_40_ms_Task_move_num1_not8:
 		CPI tmp2, 9
 		BRNE /*!=*/ Evry_40_ms_Task_move_num1_not9
-			STI LSD_ROW_1 + 0, 0x6
-			STI LSD_ROW_1 + 1, 0x5
-			STI LSD_ROW_2 + 0, 0x4
-			STI LSD_ROW_2 + 1, 0x2
+			STI LSD_ROW_1 + 0, 0x5
+			STI LSD_ROW_1 + 1, 0x4
+			STI LSD_ROW_2 + 0, 0x3
+			STI LSD_ROW_2 + 1, 0x1
 			RJMP Evry_40_ms_Task_move_num1_end
 		Evry_40_ms_Task_move_num1_not9:
 
@@ -269,7 +278,11 @@
 			STI LSD_ROW_1 + 4, '+'	//Когда скорость больше
 	Evry_1_s_Task_speed_end:
 
+	//Теперь поставим время
+	_LDI_A 1000	//Так как время в мс, то делим эту тысячу
 	_MOV_32 B_32, TimeTrip
+	_DIV_64_R32_DIV_A B_32
+	_MOV_32 B_32, ACC_32
 	_LDI_A 10
 	_DIV_64_R32_DIV_A B_32 //Мы делим TimeTrip на 10. Получаем в итоге десятки секунд + сами секунды
 	LDS tmp2, ACC_2 + 7
@@ -332,7 +345,7 @@
 	LDS tmp2, ACC_2 + 7
 	ADI tmp2, '0'
 	STS LSD_ROW_4 + 4, tmp2
-	STI LSD_ROW_3 + 3, '.'
+	STI LSD_ROW_4 + 3, '.'
 	_MOV_32 B_32, ACC_32
 
 	_LDI_A 10
@@ -355,8 +368,9 @@
 	ADI tmp2, '0'
 	STS LSD_ROW_4 + 0, tmp2
 	_MOV_32 B_32, ACC_32
+
 	
-	SetTimerTask TS_Evry_1_s_Task,1000
+	SetTimerTask TS_Evry_1_s_Task,200
  RET
 
 
@@ -366,230 +380,6 @@
 //Flag_2 = 0b ~ ~ ~ ~ ~ ~ Scr Sleep
 //Устаревшие кусочки
 /*
- ScrinUpdate:		
-		LDI 	ZL,low(WordOut+1)
-		LDI 	ZH,high(WordOut+1)
-		LD 		word,Z
-		ANDI	word,0b00000001				;Узнаём состояние стробирующего бита и если он 1 - просто опускаем его в 0
-		BREQ  SU01
-			CLI
-				LD 		word, Z
-				EORI	word,0b00000001
-				ST      Z,word
-			SEI
-			rjmp SU02
-		SU01:
-
-		LD 		word, Z
-		ANDI		word,0b0000010				;Узнаём состояние командного бита. 0 - команда, 1 - слово
-		BRNE  SU03
-				LD 		word, -Z			;Если у нас передавалась команда
-				CPI		word, 0b00000001	;Кодовое слово 3 / очистить и что то ещё с экраном
-				BRNE SU03
-					SetScrinKeyWord 0b00000110
-					rjmp SU02
-SU03:								
-				//Flag_2 = 0b ~ ~ ~ ~ Scr left(T=1) Scr Sleep
-				LDS	tmp3, Flag_2
-				ANDI tmp3,0x0A
-				BRNE /*!=*//* SU060
-					//Первый мод
-					LDI 	YL,low(StringOutOne)
-					LDI 	YH,high(StringOutOne)
-					rjmp	SU07
-				SU060:
-				CPI tmp3,0x02
-				BRNE /*!=*//* SU061
-					//Второй мод
-					LDI 	YL,low(StringOutTwo)
-					LDI 	YH,high(StringOutTwo)
-					rjmp	SU07
-				SU061:
-				CPI tmp3,0x08
-				BRNE /*!=*/ /*SU062
-					//Третий мод
-					LDI 	YL,low(StringOutThree)
-					LDI 	YH,high(StringOutThree)
-					rjmp	SU07
-				SU062:
-					LDI 	YL,low(StringOutFour)
-					LDI 	YH,high(StringOutFour)
-				SU07:
-							
-				MOV 	ZL,Yl
-				MOV 	ZH,Yh
-				LD 		Counter,Z+											;Взяли длину строки
-				LD 		tmp2,Z+												;Взяли число записаннных символов на экран
-				LD 		tmp3,Z												;Взяли переменную, следяющую за местом начала "окна"
-
-				CPI		tmp2,20
-				BREQ	SU08
-						MOV		tmp4,tmp2
-						ADD		tmp4,tmp3
-						CP		tmp4,Counter
-						BRGE	SU04
-							ADIW	Zl,1
-							ADD		Zl,tmp4
-							LD 		word,Z
-							rjmp	SU05
-						SU04:				//если больше или равно
-							CPI		Counter,21		//А если у нас строка короткая, то мы закидываем дальше только пробелы
-							BRLO	SU041
-								ADIW	Zl,1
-								SUB		tmp4,Counter
-								ADD		Zl,tmp4
-								LD 		word,Z
-								rjmp SU042
-							SU041:
-								LDI		word,' '
-							SU042:
-						SU05:
-
-						INC		tmp2
-						MOV 	ZL,Yl
-						MOV 	ZH,Yh
-						ADIW	Zl,1
-						ST		Z,tmp2
-
-						SetScrinWord word
-						rjmp SU02
-				SU08:
-				MOV 	ZL,Yl
-				MOV 	ZH,Yh
-				ADIW	Zl,1
-
-				MOV		tmp4,Counter
-				SUBI	tmp4,-20
-				CP		tmp3,tmp4
-				BREQ	SU09				//если равно
-				BRLT	SU09				//и если меньше
-					SUB	tmp3,Counter		//Тогда надо сбросить строку в 0
-				SU09:
-
-				CPI		Counter,21
-				BRLO	SU10
-					INC`	tmp3
-				SU10:
-				ADIW	Zl,1
-				ST		Z,tmp3
-
-				
-				//Flag_2 = 0b ~ ~ ~ ~ Scr left(T=1) Scr Sleep
-				LDS	tmp3, Flag_2
-				MOV tmp2,tmp3
-				ANDI tmp3,0x0A
-				CPI tmp3,0x0A
-				BRNE /*!=*/ /*SU120
-					//Первый мод
-					ANDI	tmp2,0xF5
-					SetScrinKeyWord 0x80
-					rjmp	SU13
-				SU120:
-				CPI tmp3,0x00
-				BRNE /*!=*//* SU121
-					//Второй мод
-					ORI	tmp2,0x02
-					SetScrinKeyWord 0xC0
-					rjmp	SU13
-				SU121:
-				CPI tmp3,0x02
-				BRNE /*!=*//* SU122
-					//Третий мод
-					ORI	tmp2,0x08
-					ANDI tmp2,0xFD
-					SetScrinKeyWord 0x94 //За третью строчку
-					rjmp	SU13
-				SU122:
-					ORI tmp2,0x0A
-					SetScrinKeyWord 0xD4 //За четвёртую строку
-				SU13:
-				STS Flag_2,tmp2
-				rjmp	SU02
-				//Flag_2 = 0b ~ ~ ~ ~ Scr left(T=1) Scr Sleep
-				/*LDS	tmp3, Flag_2
-				ANDI tmp3,0x02
-				BREQ SU13_0
-					RJMP SU13
-				SU13_0:
-					//Была первая строка, надо проверить - нужна ли вторая
-					LDS		Counter,StringOutTwo+1
-					//Если Counter = 0, то надо загрузить вторую строчку - хочешь не хочешь.
-					TST	Counter
-					BRNE SU15
-							LDS OSRG,Flag_2
-						ORI OSRG,0x02
-							STS Flag_2,OSRG
-						SetScrinKeyWord 0b11000000
-						rjmp	SU02
-					SU15:
-					//Мы вторую строчку уже загружали. А надо ли её по новой загружать?
-					LDS		Counter,StringOutTwo
-					CPI		Counter,17
-					BRLO	SU16
-						//Если больше, то надо грузить вторую строчку
-							LDS OSRG,Flag_2
-						ORI OSRG,0x02
-							STS Flag_2,OSRG
-						SetScrinKeyWord 0b11000000
-						rjmp	SU02
-					SU16:
-						//Если меньше, то вторую строчку грузить не надо
-						LDS		Counter,StringOutOne
-						CPI		Counter,17
-						BRSH SU18_0
-							RJMP SU18
-						SU18_0:
-							//Если больше, то надо грузить первую строчку ещё раз
-							SetScrinKeyWord ScrinKeyClear
-							SetTimerTask TS_ScrinUpdate,500
-							LDI		tmp4,0
-							STS		StringOutOne+1,tmp4
-							rjmp	SU14
-				SU13:
-					//Была вторая строка, надо проверить - нужна ли первая
-					LDS		Counter,StringOutOne
-					CPI		Counter,17
-					BRLO	SU17
-						//Если больше, то надо грузить первую строчку
-							LDS OSRG,Flag_2
-						ANDI OSRG,0b11111101
-							STS Flag_2,OSRG
-						SetScrinKeyWord ScrinKeyClear
-						SetTimerTask TS_ScrinUpdate,500
-						LDI		tmp4,0
-						STS		StringOutOne+1,tmp4
-						rjmp	SU14
-					SU17:
-					LDS		Counter,StringOutTwo
-					CPI		Counter,17
-					BRLO	SU18
-						//Если больше, то надо грузить вторую строчку ещё раз
-							LDS OSRG,Flag_2
-						ORI OSRG,0x20
-							STS Flag_2,OSRG
-						SetScrinKeyWord 0b11000000
-						LDI		tmp4,0
-						STS		StringOutTwo+1,tmp4
-						rjmp	SU02
-				
-				SU18:
-				LDI		tmp4,0
-				STS		StringOutTwo+1,tmp4 //Всё, больше грузить не надо, все флаги на ноль, курсор экрана в 0 позицию
-				STS		StringOutOne+1,tmp4
-					LDS OSRG,Flag_2
-				ANDI OSRG,0b11111101
-					STS Flag_2,OSRG
-				SetScrinKeyWord ScrinKeyClear
-				
-				SU14:
-				SetTask TS_O
-				rjmp SU12*/
-				/*
-SU02:			;Выход
-				SetTask TS_O														
-				SetTimerTask TS_ScrinUpdate,1
-SU12:
-RET
 ;------------------------------------------------------------------------------
 ;------------------------------------------------------------------------------
 ;------------------------------------------------------------------------------
@@ -651,43 +441,9 @@ NewSec:
 
 RET
 
-
-SetScrinWord_M:
-	CLI
-		STS      WordOut,OSRG					;Записали слово в регистр 1
-
-		LDS	 	OSRG, WordOut+1
-		ANDI	OSRG,0b11111100
-		ORI		OSRG,0b11
-		STS      WordOut+1,OSRG					;Установили строб и показали что передаём команду
-	SEI
-RET
-SetScrinKeyWord_M:
-	CLI
-
-		STS      WordOut,OSRG					;Записали кодовое слово в регистр 1
-
-		LDS	 	OSRG, WordOut+1
-		ANDI	OSRG,0b11111100
-		ORI		OSRG,0b1
-		STS      WordOut+1,OSRG					;Установили строб и показали что передаём команду
-
-	SEI
-RET
 ;------------------------------------------------------------------------------
 ;------------------------------------------------------------------------------
 ;------------------------------------------------------------------------------
-
-StartTime:
-	CLR_32 B_2
-	CP_F B_2,Speed
-	BREQ /*=*/ /*ST_00
-		LDI_8 B_2,1
-		ADD_F TimeV,B_2
-		SetTimerTask TS_StartTime,1
-	ST_00:
-RET
-
 
 
 SCANMode:

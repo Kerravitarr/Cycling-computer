@@ -10,6 +10,7 @@
 ;=============================================================================
 /**
 Копирует число в памяти из Yh:Yl в Xh:Xl 
+Использует Counter как счётчик байт
 */
 MOV_M:
 	MOV_CYC_00:
@@ -31,18 +32,20 @@ MOV_M:
 	BRNE CLRA64_00
  RET
 
- //Прибавляет к числу разрядом Counter 1
+ //Прибавляет к числу разрядом Counter
  //Xh:Xl - число
  INC_M:
 	PUSH	tmp3
 	CLR		tmp3
-	ADIW X,1	//Так как у нас в памяти числа идут от старшего разряда к младшему...
+	//Так как у нас в памяти числа идут от старшего разряда к младшему...
+	ADD Xl, Counter
+	ADC	Xh,tmp3
 	//Прибавляемая единица
 	SEC
 	INC_32_M_00:
 		LD	MacroR,-X
 		//А вот тут мы складываем с 0 и с С. На первом шаге С будет, на последнем... Как знать
-		ADC	tmp2,tmp3
+		ADC	MacroR,tmp3
 		ST	X, MacroR
 		DEC	Counter
 	BRNE INC_32_M_00
@@ -57,8 +60,11 @@ MOV_M:
 	PUSH	tmp3
 	PUSH	tmp2
 		CLR		tmp3
-		ADIW X,1	//Так как у нас в памяти числа идут от старшего разряда к младшему...
-		ADIW Y,1
+		//Так как у нас в памяти числа идут от старшего разряда к младшему...
+		ADD Xl, MacroR
+		ADC	Xh,tmp3
+		ADD Yl, MacroR
+		ADC	Yh,tmp3
 		CLC
 		
 		ADD_M_00:
@@ -81,8 +87,11 @@ SUB_M:
 	PUSH	tmp3
 	PUSH	tmp2
 		CLR		tmp3
-		ADIW X,1	//Так как у нас в памяти числа идут от старшего разряда к младшему...
-		ADIW Y,1
+		//Так как у нас в памяти числа идут от старшего разряда к младшему...
+		ADD Xl, MacroR
+		ADC	Xh,tmp3
+		ADD Yl, MacroR
+		ADC	Yh,tmp3
 		CLC
 		
 		SUB_M_00:
@@ -103,32 +112,32 @@ SUB_M:
 ;=============================================================================
 
 //Загрузка числа в 32-х разрядный регистр. Два параметра - адрес ячейки и число  @0=@1
-.MACRO		LDI_32
+.MACRO		_LDI_32
 	//Очищаем
 	LDI		Counter,4
    	LDI 	XL,low(@0)
 	LDI 	XH,high(@0)
 	CALL	CLR_M
    	.IF	@0 <= 0xFF
-		LDI	MacroR,@0
+		LDI	MacroR,@1
 		STS	@0+3,MacroR
 	.ELSE
    		.IF	@0 <= 0xFFFF
-			LDI	MacroR,low(@0)
+			LDI	MacroR,low(@1)
 			STS	@0+3,MacroR	
-			LDI	MacroR,high(@0)
+			LDI	MacroR,high(@1)
 			STS	@0+2,MacroR
 		.ELSE
       		.error "Аругмент не может быть больше 2х байт!"
    		.endif
    	.endif
 .ENDMACRO
-.MACRO		_LDI_32  
+.MACRO		LDI_32  
 	PUSH	XL     
 	PUSH	XH  
 	PUSH	Counter
 
-	LDI_32 @0,@1
+	_LDI_32 @0,@1
 
 	POP		Counter
 	POP		XH
