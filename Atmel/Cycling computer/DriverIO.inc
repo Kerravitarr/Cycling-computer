@@ -43,12 +43,10 @@
  O:		
 	PUSH 	ZL
 	PUSH 	ZH
-	PUSH 	word
+	PUSH 	tmp2
 	PUSH 	Counter
 
-	LDI 	ZL,low(WordOut)
-	LDI 	ZH,high(WordOut)
-	ADIW	ZL,WordOutSize-1
+	LDIW 	Z, WordOut + WordOutSize-1 //Берём с конца
 
 			
 	LDI 	Counter, WordOutSize
@@ -57,11 +55,11 @@
 
 	CLI
 
-	LD	 	word, Z
+	LD	 	tmp2, Z
 	cbi		PORTD,6
 	O04:
 			cbi		PORTB,5
-			LSL		word
+			LSL		tmp2
 			BRCS O01
 				cbi		PORTD,4
 				RJMP	O02
@@ -73,7 +71,7 @@
 			DEC		Counter
 		BRNE 	O04			;Прошли слово
 
-		LD	 	word, -Z
+		LD	 	tmp2, -Z
 		DEC 	Counter2
 		LDI 	Counter, 8
 	BRNE 	O04			;Прошли фразу
@@ -83,73 +81,100 @@
 	sbi		PORTD,6
 
 	pop 	Counter
-	pop 	word
+	pop 	tmp2
 	pop 	ZH
 	pop 	ZL
 
 RET
 
-/**Функция появления прерывания со стороны ног входных сигналов*/
-I:		
-	PUSH 	ZL
-	PUSH 	ZH
-	PUSH 	word
-	PUSH 	Counter
-	PUSH 	OSRG
+//Чтение данных с входной микрухи
+I:
+	//Читаем регистры
+	LDIW	Z, WordIn//Берём память, куда будем писать
 
-	LDI 	ZL,low(WordIn)
-	LDI 	ZH,high(WordIn)
-	DEC		Zl
-	DEC		Zl
+	LDI 	tmp2, WordInSize //Всего регистров
 
-			
-	LDI 	Counter, WordInSize
-	MOV		Counter2,Counter
-	LDI 	Counter, 8
-
-	CLI
-
-	ANDI 	word, 0
-	cbi		PORTD,7
-	sbi		PORTD,7
-	Sbi		PORTB,1
+	CBI		PORTD,7	//запоминание состояний входа. Обновляем входящую микруху
+	SBI		PORTD,7 //Микруха быстрее нас - успеет за миг
 	I04:
-			cbi		PORTB,5
-			IN		OSRG,PIND
-			ANDI	OSRG,0b00100000
-			BRNE I01
-				RJMP	I02
-			I01:
-				ORI		word,1
-			I02:
-
-			ROR		word
-			sbi		PORTB,5
+		LDI 	Counter, 8	//Читаем 8 бит
+		CLR 	tmp3		//От сюда читаем
+		I_world_l:
+			CBI		PORTB,4
+			LSL		tmp3	//Подготавливаем под бит место
+			SBIC	PIND, 5 //данные извне. Если тут не 0 (если 0 - пропускаем), то запоминаем!
+				ORI		tmp3,1
+			SBI		PORTB,4 //Строб - следующий, пожалуйста 
 			DEC		Counter
-		BRNE 	I04			;Прошли слово
-		ROR		word
-
-		INC		ZL
-		INC		ZL
-		ST	 	Z,word
-		DEC 	Counter2
-		LDI 	Counter, 8
-	BRNE 	I04			;Прошли фразу
-	Cbi		PORTB,1
+		BRNE /*!=*/ 	I_world_l	;Прошли слово?
+		ST	 	Z,tmp3
+		ADIW	Z,2 //Сдвигаем по 2, так как у нас подряд идёт байт текущий и предыдущий
+		DEC 	tmp2
+	BRNE /*!=*/ 	I04	;Всё вычитали?
 			
-//			SetTask TS_SignalIn
+	//Обрабатываем что начитали
 
-	LDI 	Counter, 1
-	OUT		EIFR,Counter
-	SEI
+	LDS	Zl,WordIn		//Стало
+	LDS	Zh,WordIn+1		//Было
+	TST Zh
+	BRNE /*!=*/ SignalIn_nend
+		//У нас Zl - пустой. Это инициализация, нулевой запуск. Тут все кнопки нажаты разом
+		RJMP SignalIn_end;
+	SignalIn_nend:
+	LDI Counter, 1
+	SignalIn_test_w1:
+		MOV tmp2, Zh
+		EOR	tmp2, Zl //Сравниваем состояния
+		AND tmp2, Counter //Выбираем текущий бит
+		BREQ /*=*/ SignalIn_w1_not_dif
+			//Есть разница!
+			MOV tmp2, Zl
+			AND tmp2, Counter //Выбираем текущий бит
+			BRNE /*!=*/ SignalIn_w1_not_enable //Там мы смотрим по 0. 0 = включение кнопки
+				//Эта разница ещё и на включение! Тогда выполняем функцию!
+				CPI Counter, 1 << 0
+				BRNE /*!=*/ SignalIn_w1_not_UP
+					SetTask TS_Key_UP
+					RJMP SignalIn_w1_not_enable
+				SignalIn_w1_not_UP:
+				CPI Counter, 1 << 1
+				BRNE /*!=*/ SignalIn_w1_not_R
+					SetTask TS_Key_R
+					RJMP SignalIn_w1_not_enable
+				SignalIn_w1_not_R:
+				CPI Counter, 1 << 2
+				BRNE /*!=*/ SignalIn_w1_not_D
+					SetTask TS_Key_D
+					RJMP SignalIn_w1_not_enable
+				SignalIn_w1_not_D:
+				CPI Counter, 1 << 3
+				BRNE /*!=*/ SignalIn_w1_not_L
+					SetTask TS_Key_L
+					RJMP SignalIn_w1_not_enable
+				SignalIn_w1_not_L:
+				CPI Counter, 1 << 4
+				BRNE /*!=*/ SignalIn_w1_not_enter
+					//Нажали ентер!
+					SetTask TS_Key_E
+					RJMP SignalIn_w1_not_enable
+				SignalIn_w1_not_enter:
+			SignalIn_w1_not_enable:
+		SignalIn_w1_not_dif:
+		LSL Counter //Сдвигаем бит по всему байту
+	BRNE /*!=*/ SignalIn_test_w1
 
-	pop 	OSRG
-	pop 	Counter
-	pop 	word
-	pop 	ZH
-	pop 	ZL
-			
+	SignalIn_end:
+	//Теперь обновляем все состояния и свободны
+	LDIW Z, WordIn
+	LDI Counter, WordInSize
+	SignalIn_copy:
+		LD tmp2, Z+
+		ST Z+, tmp2
+		DEC Counter
+	BRNE /*!=*/ SignalIn_copy
+
 RET
+
 
 /**Сработал Геркон*/
 ReedSwitch_E:
@@ -178,335 +203,35 @@ ReedSwitch_E:
 	_MOV_32 TimeVOld, C_32
 RET
 
-
-SignalIn:	
-			/*LDI 	ZL,low(WordIn)
-			LDI 	ZH,high(WordIn)
-			LD		tmp2,Z+					//Стало
-			LD		tmp3,Z					//Было
-			TST		tmp3
-			BRNE	SI98
-				JMP SI99			//Если у нас было 0, значит мы срочно дуем в конец, это инициализация!!!
-			SI98:
-			EOR		tmp2,tmp3
-			SI00:
-			SBRC	tmp2,0
-				RJMP SI01
-			SBRC	tmp2,1
-				RJMP SI02
-			SBRC	tmp2,2
-				RJMP SI03
-			SBRC	tmp2,3
-				RJMP SI04
-			SBRC	tmp2,4
-				RJMP SI05
-			SBRC	tmp2,5
-				RJMP SI06
-			SBRC	tmp2,6
-				RJMP SI07
-			SBRC	tmp2,7
-				RJMP SI08
-			RJMP SI99
-
-
-			SI01:
-					EORI tmp2,0b1
-					RJMP SI00
-			SI02:		//Геркон педалей
-					EORI tmp2,0b10
-					RJMP SI00
-			SI03:		//Геркон колеса
-					EORI tmp2,0b100
-					PUSH tmp2
-					CLR_32 B_2
-					CP_F B_2,TimeV
-					BRNE /*!=*/ /*SI03_01
-						//Мы только стартанули
-						LDI_8 B_2,1
-						ADD_F TimeV,B_2
-						LDI_8 Speed,1
-						SetTimerTask TS_StartTime,1
-						RJMP SI03_03
-					SI03_01:
-						//У нас новое касание
-						MOV_32 B_2,Lenght
-						DIV_F B_2,TimeV	//Скорость м/с
-						//LPM_Z_X Const_3_6,C_2,4
-						//MUL_F B_2,C_2	//Скорость км/ч
-						MOV_32 Speed, B_2
-						/*LPM_Z_X Alf,C_2,4
-						MUL_F B_2,C_2
-						MOV_32 D_2,Speed
-						MUL_F D_2,C_2
-						ADD_F Speed,B_2
-						SUB_F Speed,D_2*//*
-							//Текущая скорость
-
-						ADD_F Dist,Lenght //Дистанция
-
-						ADD_F TimeTrip,TimeV //Общее время
-
-						MOV_32 AverageSpeed,Dist
-						DIV_F AverageSpeed,TimeTrip //Средняя скорость м/с
-						//LPM_Z_X Const_3_6,C_2,4
-						//MUL_F AverageSpeed,C_2	//Средняя скорость км/ч
-
-						CP_F MaxSpeed,Speed
-						BRSH /*>=*/ /*SI03_02
-							MOV_32 MaxSpeed,Speed
-						SI03_02:
-
-						CP_F MaxSpeedOdo,Speed
-						BRSH /*>=*//* SI03_04
-							MOV_32 MaxSpeedOdo,Speed
-						SI03_04:
-
-						MOV_32 B_2,Lenght
-						ADD_F Odometr,B_2
-
-						ADD_F TimeOdo,TimeV
-
-						CLR_32 TimeV
-
-						SI03_03:
-						LDI 	ZL,low(WordIn)
-						LDI 	ZH,high(WordIn)
-						LD		tmp3,Z
-						ORI tmp3,0b100
-						ST		Z,tmp3
-						POP tmp2
-						SetTask TS_LedPower //Крутим колёса
-					RJMP SI00
-			SI04:					//Нажали ентер
-					SetTimerTask TS_New_Init_Scrin,60000 //Обновление экрана через 60 секунд
-					//Flag_1 = 0b Key1 Key2 Scr MENU UART TWI Lamp U Temp
-					MOV	tmp3, Flag_1
-					ANDI tmp3,0b100000
-					BREQ SI0410
-						JMP SI0411
-					SI0410:				//Инициализируем меню
-							//Сохраняем время, часы и минуты, дни недели ((одноразовый))
-
-							//Делаем всё, чтобы меню не чувствовало себя ущербно
-							LDI		word,-2
-
-							LDI		OSRG,2				//Сохраняем новый пункт меню
-							LDI 	YL,low(StringOutOne)	//Установили строку которую переносим
-							LDI 	YH,high(StringOutOne)	//
-							MOV		Al,Yl
-							MOV		Ah,Yh
-							MOV		ZL,Yl
-							MOV		ZH,Yh
-							CALL	MenuUpDown	
-							LDI		OSRG,1				//Сохраняем новый пункт меню
-							LDI 	YL,low(StringOutOne)	//Установили строку которую переносим
-							LDI 	YH,high(StringOutOne)	//
-							MOV		Al,Yl
-							MOV		Ah,Yh
-							LDI 	ZL,low(StringOutTwo)	//Установили строку в которую переносим
-							LDI 	ZH,high(StringOutTwo)	//
-							CALL	MenuUpDown				//Мы первый засунем в первый, а потом его же и обновим
-							EORI Flag_1,0b100000//Устанавливаем флаг, что мы инициализиаровали меню
-							//-----------------------------------//Очищем экран
-							SetScrinKeyWord 0b1
-							SetTask TS_O
-
-							NewScrinUpdate
-
-							RJMP	SI041
-
-					SI0411:	//А если мы инициализировали меню, то переходим сюда!
-							LDI 	YL,low(MenuPCBS)		//Установили строку которую переносим
-							LDI 	YH,high(MenuPCBS)		//	
-					
-							SUBI	Yl,-2					//Берём дитя
-							SBCI	Yh,-1
-							LD		OSRG,Y
-							TST		OSRG
-							BREQ	SI041
-								LDI 	YL,low(StringOutOne)	//Установили строку которую переносим
-								LDI 	YH,high(StringOutOne)	//
-								MOV		Al,Yl
-								MOV		Ah,Yh
-								MOV		ZL,Yl
-								MOV		ZH,Yh
-								CALL	MenuUpDown				//Мы первый засунем в первый, а потом его же и обновимъ
-								LDI 	YL,low(MenuPCBS)		//Сохраняем новый пункт меню
-								LDI 	YH,high(MenuPCBS)		//
-								SUBI	Yl,-4
-								SBCI	Yh,-1
-								LD		OSRG,Y
-								LDI 	YL,low(StringOutOne)	//Установили строку которую переносим
-								LDI 	YH,high(StringOutOne)	//
-								MOV		Al,Yl
-								MOV		Ah,Yh
-								LDI 	ZL,low(StringOutTwo)	//Установили строку в которую переносим
-								LDI 	ZH,high(StringOutTwo)	//
-					
-								CALL	MenuUpDown				//Мы первый засунем в первый, а потом его же и обновим
-								ORI tmp2,0b100000				//Нажимаем кнопку вниз
-								//-----------------------------------//Очищем экран
-								SetScrinKeyWord 0b1
-								SetTask TS_O
-								NewScrinUpdate
-					SI041:		
-					LDI 	ZL,low(WordIn)
-					LDI 	ZH,high(WordIn)
-					LD		tmp3,Z
-					ORI tmp3,0b1000
-					ST		Z,tmp3
-					INC		Zl
-					EORI tmp2,0b1000
-					RJMP SI00
-			SI05:		//Нажали кнопку влево
-					//Flag_1 = 0b Key1 Key2 ~ MENU UART TWI Lamp U Temp
-					MOV	tmp3, Flag_1
-					ANDI tmp3,0b100000
-					BRNE SI0510
-						JMP SI051
-					SI0510:	
-						//Обработка нажатия
-						LDS tmp3,StringOutTwo+(StringOutSize-1)-1
-						DEC tmp3
-						CPI tmp3,8
-						BREQ /*=*//* SI051
-							STS StringOutTwo+(StringOutSize-1)-1,tmp3
-					SI051:
-					LDI 	ZL,low(WordIn)
-					LDI 	ZH,high(WordIn)
-					LD		tmp3,Z
-					ORI tmp3,0b10000
-					ST		Z,tmp3
-					INC		Zl
-					EORI tmp2,0b10000
-					RJMP SI00
-			SI06:		//Нажали кнопку вниз
-					//Flag_1 = 0b Key1 Key2 ~ MENU UART TWI Lamp U Temp
-					PUSH tmp2
-					MOV	tmp3, Flag_1
-					ANDI tmp3,0b100000
-					BRNE SI0610
-						JMP SI061
-					SI0610:
-						LDS tmp3,StringOutTwo+(StringOutSize-1)-1
-						SUBI tmp3,8
-
-						CLR tmp2
-						SBRC tmp3,1
-							LDI tmp2,10
-						SBRS tmp3,0
-							LDI tmp2,100
-						SBRC tmp3,2
-							LDI tmp2,1
-
-						CLR_32 B_2
-						STS B_2+3,tmp2
-						TST tmp2
-						BRNE /*!=*//* SI0611
-							LDI tmp2,0x03
-							STS B_2+2,tmp2
-							LDI tmp2,0xE8
-							STS B_2+3,tmp2
-						SI0611:
-						SUB_F Lenght,B_2
-					SI061:
-					LDI 	ZL,low(WordIn)
-					LDI 	ZH,high(WordIn)
-					LD		tmp3,Z
-					POP tmp2
-					ORI		tmp3,0b100000
-					ST		Z,tmp3
-					INC		Zl
-					EORI tmp2,0b100000
-					RJMP SI00
-			SI07:		//Нажали кнопку впрaво
-					//Flag_1 = 0b Key1 Key2 ~ MENU UART TWI Lamp U Temp
-					MOV	tmp3, Flag_1
-					ANDI tmp3,0b100000
-					BRNE SI0710
-						JMP SI071
-					SI0710:	
-						//Обработка нажатия
-						LDS tmp3,StringOutTwo+(StringOutSize-1)-1
-						INC tmp3
-						CPI tmp3,13
-						BRNE /*!=*//* SI072
-							STI Mode,Mode51
-							LDI tmp3,3
-						SI072:
-						STS StringOutTwo+(StringOutSize-1)-1,tmp3
-					SI071:
-					LDI 	ZL,low(WordIn)
-					LDI 	ZH,high(WordIn)
-					LD		tmp3,Z
-					ORI		tmp3,0b1000000
-					ST		Z,tmp3
-					INC		Zl
-					EORI tmp2,0b1000000
-					RJMP SI00
-			SI08:		//Нажали кнопку вверх
-					//Flag_1 = 0b Key1 Key2 ~ MENU UART TWI Lamp U Temp
-					PUSH tmp2
-					MOV	tmp3, Flag_1
-					ANDI tmp3,0b100000
-					BRNE SI0810
-						JMP SI081
-					SI0810:
-						LDS tmp3,StringOutTwo+(StringOutSize-1)-1
-						SUBI tmp3,8
-
-						CLR tmp2
-						SBRC tmp3,1
-							LDI tmp2,10
-						SBRS tmp3,0
-							LDI tmp2,100
-						SBRC tmp3,2
-							LDI tmp2,1
-
-						CLR_32 B_2
-						STS B_2+3,tmp2
-						TST tmp2
-						BRNE /*!=*/ /*SI0811
-							LDI tmp2,0x03
-							STS B_2+2,tmp2
-							LDI tmp2,0xE8
-							STS B_2+3,tmp2
-						SI0811:
-						ADD_F Lenght,B_2
-					SI081:
-					LDI 	ZL,low(WordIn)
-					LDI 	ZH,high(WordIn)
-					LD		tmp3,Z
-					ORI tmp3,0b10000000
-					ST		Z,tmp3
-					INC		Zl
-					POP tmp2
-					EORI tmp2,0b10000000
-					RJMP SI00
-			SI99:
-			LDI 	ZL,low(WordIn)
-			LDI 	ZH,high(WordIn)
-			LD		tmp3,Z+
-			ST		Z,tmp3
-RET*/
-
-
-
-MenuUpDown:
-					
-RET
-
 TWI_IO_End:
-		LDI 	YL,low(TWI_IO)
-		LDI 	YH,high(TWI_IO)
-		INC		Yl
-		LD		OSRG,Y
-		CPI		OSRG,(0b1101000<<1)|1
-		BRNE	TIE01
-			//RCALL TWI_IO_End_Clock_Read
-			JMP TIE00
-		TIE01:
-		CPI		OSRG,(0b1010000<<1)|1
+		CLI
+			CBIFlag TWI_Busy
+		SEI
+
+		LDS		tmp2, TWI_IO
+		CPI		tmp2,DS1307Write
+		BRNE	TIE_not_cw
+			RCALL TWI_IO_End_Clock_Write
+			RJMP TWI_IO_End_end
+		TIE_not_cw:
+		CPI		tmp2,DS1307Read
+		BRNE	TIE_not_cr
+			RCALL TWI_IO_End_Clock_Read
+			RJMP TWI_IO_End_end
+		TIE_not_cr:
+		
+		CPI		tmp2,BME250Write
+		BRNE	TIE_not_bw
+			RCALL TWI_IO_End_BME250_Write
+			RJMP TWI_IO_End_end
+		TIE_not_bw:
+		CPI		tmp2,BME250Read
+		BRNE	TIE_not_br
+			RCALL TWI_IO_End_BME250_Read
+			RJMP TWI_IO_End_end
+		TIE_not_br:
+
+		/*CPI		OSRG,(0b1010000<<1)|1
 		BRNE	TIE02
 			//Работаем с будильниками. Для этого у нас есть флаговый бит, это двоеточие в 00:00
 			//RCALL TWI_IO_End_EEPROM_Read
@@ -536,18 +261,13 @@ TWI_IO_End:
 			RJMP TIE00
 		TIE20:
 
-		TIE00:
-		CLI
-			//Flag_1 = 0b TWI Lamp U Temp
-			MOV		OSRG,Flag_1
-			ANDI	OSRG,0b11110111		//Флаг Занятости TWI
-			MOV		Flag_1,OSRG
-		SEI
+		TIE00:*/
+		TWI_IO_End_end:
 RET
 //Файлы драйверов
- //.include "TWIDevice/Clock.inc"
+ .include "TWIDevice/Clock.inc"
  //.include "TWIDevice/EEPROM.inc"
- //.include "TWIDevice/Wether.inc"
+ .include "TWIDevice/Wether.inc"
 
 /*Функция, вызывается, если у нас устройство не ответило*/
 TWI_IO_Error:
@@ -571,8 +291,9 @@ TWI_IO_Error:
 		STS		UART_O+1+16,OSRG
 		SetTask TS_StartUART*/
 
-		//Flag_1 = 0b TWI Lamp U Temp
-		ANDI	Flag_1,0b11110111		//Флаг Занятости TWI
+		CLI
+			CBIFlag TWI_Busy
+		SEI
 RET
 
 UART_End:
@@ -664,14 +385,13 @@ StartUART:
 	SEI
 RET
 
+//Функция запуска I2C
 StartTWI:
 	LDI OSRG,(1<<TWEN)|(1<<TWIE)|(1<<TWINT)|(1<<TWSTA)			/*разрешаем прерывание и формируем состояние СТАРТ, мастер - это мы!*/
 	UOUT TWCR,OSRG
 	CLI
-		//Flag_1 = 0b TWI Lamp U Temp
-		MOV		OSRG,Flag_1
-		ORI		OSRG,0b1000		//Флаг Занятости TWI
-		MOV		Flag_1,OSRG
+		STI	TWI_IOc, 0
+		SBIFlag TWI_Busy
 	SEI
 RET
 /*

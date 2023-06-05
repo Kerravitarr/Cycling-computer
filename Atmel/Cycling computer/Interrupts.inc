@@ -61,8 +61,13 @@ RETI						; выходим из прерывания
 DataIN:
 	in 		interrupt,SREG			; Save Sreg
 	PUSH	MacroR
+
 	InteraptSetTask TS_I
-	POP 	MacroR					; восстанавливаем переменные
+
+	LDI 	MacroR, 1   //Сбрасываем флаг прерывания
+	OUT		EIFR,MacroR
+
+	POP	MacroR						; восстанавливаем переменные
 	out 	SREG,interrupt			; Восстанавливаем регистры
 RETI
 /**Сработал Геркон*/
@@ -154,7 +159,7 @@ TWI_Event:
 		CPI	interrupt,0x40		//SLA+R+ACK Послали адрес с битом на чтение, а ведомый отозвался. Хорошо! Будем читать.
 		BRNE	TWIE40
 			TSTFlag TWI_Busy
-			BRNE /*!=*/ TWIE4002//Наш автобус не занят, ни чего не ждали, пошло оно всё, ни чего не знаем
+			BREQ /*=*/ TWIE4002//Наш автобус не занят, ни чего не ждали, пошло оно всё, ни чего не знаем
 				//Кто то ожидает чего то, отлично. Читаем!
 				RJMP TWIE_SEND_ACK
 			TWIE4002:
@@ -182,15 +187,26 @@ TWI_Event:
 				STS		TWI_IOc,interrupt
 				LDS		MacroR,TWDR
 				ST		Z,MacroR		//Вот мы и сохранили наш байт
-				CPI		interrupt,TWISize
-				BRNE /*!=*/ TWIE_SEND_ACK //Всё ок, место есть
-					//Проблемка, это был последний. Надо что то сделать, срочно. Или будет беда
-					InteraptSetTask TS_TWI_IO_End		
-			RJMP TWIE_SEND_ACK
+				LDS		MacroR, TWI_IOl //Сколько мы вообще ждём?
+				CP		interrupt, MacroR
+				BRSH /*>=*/ TWIE50_end_read //Отлично, приняли всё, что хотели!
+					CPI		interrupt,TWISize
+					BRNE /*!=*/ TWIE_SEND_ACK //Всё ок, место есть
+						//Проблемка, это был последний. Надо что то сделать, срочно. Или будет беда
+						TWIE50_end_read:	
+					RJMP TWIE_SEND_NACK
 		TWIE50:
 
 		CPI	interrupt,0x58			//Receive Byte+NACK Мы приняли байт от ведомого и сказали ему «иди NACK!» И он обиженый ушел, освободив шину.
 		BRNE	TWIE58
+				LDS		interrupt,TWI_IOc		//Сколько мы прочитали
+				LDI 	ZL,low(TWI_IO)
+				LDI 	ZH,high(TWI_IO)
+				ADD		Zl,interrupt //Сдвигаем окошечко
+				sbci	ZH, 0
+				LDS		MacroR,TWDR
+				ST		Z,MacroR		//Вот мы и сохранили наш байт, последний и крайний одновременно
+				InteraptSetTask TS_TWI_IO_End //Закончили приём, мы свободны!
 				RJMP TWIE_SEND_STOP
 		TWIE58:
 

@@ -26,11 +26,14 @@
  .equ DIV_64_MODE_32_BY_ACC = 0x0C
  .equ DIV_64_MODE_64_BY_ACC = 0x0D
 
- //АСС(64 бит) = АСС(64 бит) / @0(32)
+ //Спецфлаги, нужны для деления знаковых чисел
+ .equ DIVS_FLAG_negA = 1 << 0
+ .equ DIVS_FLAG_negR = 1 << 1
+
+ //АСС(беззнак 64 бит) = АСС(беззнак 64 бит) / @0(беззнак 32)
  .MACRO		_DIV_64_A_DIV_R32
 	LDI		MacroR,DIV_64_MODE_ACC_BY_32
-   	LDI 	XL,low(@0)
-	LDI 	XH,high(@0)
+	LDIW	X,@0
 	CALL	DIV64_M
 .ENDMACRO
 .MACRO		DIV_64_A_DIV_R32
@@ -43,11 +46,10 @@
 	POP		XL
 .ENDMACRO
 
- //АСС(64 бит) = АСС(64 бит) / @0(64)
+ //АСС(беззнак 64 бит) = АСС(беззнак 64 бит) / @0(беззнак 64)
  .MACRO		_DIV_64_A_DIV_R64
 	LDI		MacroR,DIV_64_MODE_ACC_BY_64
-   	LDI 	XL,low(@0)
-	LDI 	XH,high(@0)
+	LDIW	X,@0
 	RCALL	DIV64_M
 .ENDMACRO
 .MACRO		DIV_64_A_DIV_R64
@@ -60,11 +62,10 @@
 	POP		XL
 .ENDMACRO
 
- //АСС(64 бит) = @0(32) / АСС(64 бит)
+ //АСС(беззнак 64 бит) = @0(беззнак 32) / АСС(беззнак 64 бит)
  .MACRO		_DIV_64_R32_DIV_A
 	LDI		MacroR,DIV_64_MODE_32_BY_ACC
-   	LDI 	XL,low(@0)
-	LDI 	XH,high(@0)
+	LDIW	X,@0
 	CALL	DIV64_M
 .ENDMACRO
 .MACRO		DIV_64_R32_DIV_A
@@ -77,12 +78,11 @@
 	POP		XL
 .ENDMACRO
 
- //АСС(64 бит) = @0(64) / АСС(64 бит)
+ //АСС(беззнак 64 бит) = @0(беззнак 64) / АСС(беззнак 64 бит)
  .MACRO		_DIV_64_R64_DIV_A
 	LDI		MacroR,DIV_64_MODE_64_BY_ACC
-   	LDI 	XL,low(@0)
-	LDI 	XH,high(@0)
-	RCALL	DIV64_M
+	LDIW	X,@0
+	CALL	DIV64_M
 .ENDMACRO
 .MACRO		DIV_64_R64_DIV_A
 	PUSH	XL     
@@ -93,6 +93,112 @@
 	POP		XH
 	POP		XL
 .ENDMACRO
+
+ //АСС(знак 64 бит) = АСС(знак 64 бит) / @0(знак 32)
+ .MACRO		_DIVS_64_A_DIV_R32
+	LDI		MacroR,DIV_64_MODE_ACC_BY_32
+	LDIW	X,@0
+	CALL	DIVS_M
+.ENDMACRO
+.MACRO		DIVS_64_A_DIV_R32
+	PUSH	XL     
+	PUSH	XH
+
+	_DIVS_64_A_DIV_R32 @0
+
+	POP		XH
+	POP		XL
+.ENDMACRO
+
+ //АСС(знак 64 бит) = АСС(знак 64 бит) / @0(знак 64)
+ .MACRO		_DIVS_64_A_DIV_R64
+	LDI		MacroR,DIV_64_MODE_ACC_BY_64
+	LDIW	X,@0
+	CALL	DIVS_M
+.ENDMACRO
+.MACRO		DIVS_64_A_DIV_R64
+	PUSH	XL     
+	PUSH	XH
+
+	_DIVS_64_A_DIV_R64 @0
+
+	POP		XH
+	POP		XL
+.ENDMACRO
+
+
+DIVS_M:
+	PUSH tmp2
+	PUSH tmp3
+	PUSH MacroR
+	MOV tmp3, MacroR //Сохраняем флаг
+
+	CLR tmp2
+	LDS MacroR, ACC_1
+	ANDI MacroR, 1 << 7
+	BREQ /*=*/ DIVS_M_ACC_positive
+		ORI tmp2, DIVS_FLAG_negA
+		NEG_64 ACC_1
+	DIVS_M_ACC_positive:
+
+	LD MacroR, X
+	ANDI MacroR, 1 << 7
+	BREQ /*=*/ DIVS_M_R_positive
+		ORI tmp2, DIVS_FLAG_negR
+		PUSH Xl
+		PUSH Xh
+		
+			CPI tmp3, DIV_64_MODE_ACC_BY_32
+			BREQ /*=*/ DIVS_M_R32
+			CPI tmp3, DIV_64_MODE_32_BY_ACC
+			BREQ /*=*/ DIVS_M_R32
+				LDI MacroR, 8
+				CALL NEG_M
+				RJMP DIVS_M_R_end
+			DIVS_M_R32:
+				LDI MacroR, 4
+				CALL NEG_M
+			DIVS_M_R_end:
+			
+		POP Xh
+		POP Xl
+	DIVS_M_R_positive:
+	//Теперь у нас аккумулятор и число точно положительные, а в регистре tmp3 хранится знак числа
+	POP MacroR //Достаём режим работы
+	PUSH Xl
+	PUSH Xh
+	RCALL DIV64_M//И умножаем
+	POP Xh
+	POP Xl
+	TST tmp2
+	BREQ /*=*/ DIVS_M_end //Шик, ни чего делать и не нужно!
+		//Как жаль, где-то негатив есть.
+		CPI tmp2, DIVS_FLAG_negA | DIVS_FLAG_negR
+		BREQ /*=*/ DIVS_M_neg2
+			//У нас только одно число негативное
+			//Значит результат тоже отрицательным будет :(
+			NEG_64 ACC_1
+			ANDI tmp2, DIVS_FLAG_negA
+			BRNE /*!=*/ DIVS_M_end //Отрицательный - аккумулятор. Ни чего не меняем
+				//Отрицательное число. Вот его и инвертнём дальше!
+		DIVS_M_neg2:
+			//У нас оба числа негативные. А - на - даст +!
+			//Надо инвертнуть только число
+			CPI tmp3, DIV_64_MODE_ACC_BY_32
+			BREQ /*=*/ DIVS_M_R32
+			CPI tmp3, DIV_64_MODE_32_BY_ACC
+			BREQ /*=*/ DIVS_M_R32
+				LDI MacroR, 8
+				CALL NEG_M
+				RJMP DIVS_M_end
+			DIVS_M_R32_2:
+				LDI MacroR, 4
+				CALL NEG_M
+	DIVS_M_end:
+	POP tmp3
+	POP tmp2
+RET
+
 
  //Переносит из Yh:Yl в r0:r7. Причём в R0 - младший байт, в R7 - старший
  DIV64_M_Load:
@@ -119,7 +225,9 @@
  RET
 
 
-
+ //Делит два беззнаковых числа друг на друга
+ //MacroR - режим, которым делим
+ //X - указатель на один из делимых чисел
  DIV64_M:
 	//Регистры доступа к памяти
 	PUSH	YL
@@ -184,7 +292,7 @@
 	RCALL DIV64_M_Load
 
 	//Считаем, сколько делимое имеет реально бит
-	CLR R14
+	CLR Counter
 	
 	TST	R7
 	BRNE DIV64_M_dividend_8b

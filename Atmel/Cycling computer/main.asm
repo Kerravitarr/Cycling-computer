@@ -54,12 +54,12 @@
 			.def r14_	 = r14				;		
 			.def r15_	 = r15				;			
 			.def Counter = r16				; Счетчик (преимущественно используется для организации циклов)			;
-			.def OSRG	 = r17
+			.def OSRG	 = r17				;По идее спецрегистр для RTOS... Но по факту просто пока не нужен этот регистр, вот его ни кто и не трогает
 			.def tmp2	 = r18				;
 			.def tmp3	 = r19				;
 			.def tmp4	 = r20				; Некоторые переменные общего назначения
 			.def interrupt= r21				; Регистр полностью под властью прерываний
-			.def word	 = r22				; Переменная для работы со словами
+			.def r22_	 = r22				; Переменная для работы со словами
 			.def MacroR	 = r23				; Регистр для макросов
 			.def r24_	 = r24				;
 			.def Flag_1	 = r25				; Флаги регистра
@@ -76,6 +76,9 @@ Flag_2:		.byte 1							;Флаги из памяти
 			.equ 	TWI_Busy		= 0				; Флаг занятости устройства
 			.equ 	EEPROM_write	= 1				; Флаг записи в EEPROM
 			.equ 	isMove			= 2				; Флаг движения. Если тут 1 - мы куда-то едем
+			.equ 	LSD_SCAN		= 3				; Флаг сканирования. Меняет на экране строки отображения по кругу
+			.equ 	F_LSD_SCAN		= 4				; Флаг сканирования строки, чтобы менялись циферки автоматом
+			.equ 	F_LSD_isBlink	= 5				; При меню, показывает - мигать курсором или нет
 
 
 			.equ 	TaskQueueSize	= 30			; Размер очереди событий
@@ -100,6 +103,11 @@ LSD_ROW_1:	.byte 	LSD_ROW_LENGHT					; Строка экрана
 LSD_ROW_2:	.byte 	LSD_ROW_LENGHT					; Строка экрана
 LSD_ROW_3:	.byte 	LSD_ROW_LENGHT					; Строка экрана
 LSD_ROW_4:	.byte 	LSD_ROW_LENGHT					; Строка экрана
+					;А эти переменные указывают откуда можно писать дополнительные параметры на экран
+			.equ	LSD_ROW_1_PAR = LSD_ROW_1 + LSD_ROW_LENGHT / 2
+			.equ	LSD_ROW_2_PAR = LSD_ROW_2 + LSD_ROW_LENGHT / 2
+			.equ	LSD_ROW_3_PAR = LSD_ROW_3 + LSD_ROW_LENGHT / 2
+			.equ	LSD_ROW_4_PAR = LSD_ROW_4 + LSD_ROW_LENGHT / 2
 
 			.equ 	WordInSize			= 1			; Количество регистров ввода
 WordIn:		.byte 	WordInSize*2					; Адреса слов
@@ -162,9 +170,30 @@ Degrees:	.byte 	1								; Угол подъёма, причём +-!
 Height:		.byte	2								;Высота, м
 Clock:		.byte 	8								;Тут у нас храняться часы. HH:MM:SS
 AccLevel:	.byte	1								;Уровень заряда батарее, число от 0 до 100
-Temperature:.byte	1								;Температура
-Pressure:	.byte	1								;Давление
-Humidity:	.byte	1								;Влажность
+Temperature:.byte	2								;Температура in DegC, resolution is 0.01 DegC. Output value of “5123” equals 51.23
+Pressure:	.byte	2								;Давление в мм рт столба
+Humidity:	.byte	1								;Влажность в %
+
+//Параметры датчика влажности
+BME_dig_T1u16: .byte	2							;
+BME_dig_T2s16: .byte	2							;
+BME_dig_T3s16: .byte	2							;
+BME_dig_P1u16: .byte	2							;
+BME_dig_P2s16: .byte	2							;
+BME_dig_P3s16: .byte	2							;
+BME_dig_P4s16: .byte	2							;
+BME_dig_P5s16: .byte	2							;
+BME_dig_P6s16: .byte	2							;
+BME_dig_P7s16: .byte	2							;
+BME_dig_P8s16: .byte	2							;
+BME_dig_P9s16: .byte	2							;
+BME_dig_H1u8:  .byte	1							;
+BME_dig_H2s16: .byte	2							;
+BME_dig_H3u8:  .byte	1							;
+BME_dig_H4s16: .byte	2							;
+BME_dig_H5s16: .byte	2							;
+BME_dig_H6s8:  .byte	1							;
+T_fine:		   .byte	4							;Вспомогательный параметр, на основе которого вводится коррекция данных от температуры
 
 
 LSD_mode:	.byte	1								;В каком режиме находится экран
@@ -195,14 +224,31 @@ LSD_mode:	.byte	1								;В каком режиме находится экра
 
 			.equ LSD_M_READY			= 255		;Теперь Дисплей готов к работе
 
+LCD_cursor_pos:.byte 1								;Позиция курсора на дисплее 
 LCD_display_mode:.byte 1							;Режим отображения экрана
-			.equ DEFAULT				= 0			;Базовый: 
+			.equ DM_DEFAULT				= 0			;Базовый: 
+			.equ DM_AVR_V				= 0				//средяня V
+			.equ DM_nowT				= 1				//время
+			.equ DM_T					= 2				//температура
+			.equ DM_P					= 3				//Давление
+			.equ DM_H					= 4				//Влажность
+			.equ DM_maxV				= 5				//Максимальная скорость
+			.equ DM_odo					= 6				//Весь пройденый путь за всё время
+			.equ DM_SCAN				= 7			;Сколько у нас всего строк показывает это число
+			.equ DM_MENU				= 8			;Пункты меню:
+			.equ DM_MENU_RESTART		= 8			;	- обновить поездку
+			.equ DM_MENU_TIME_TRIP		= 9			;	- Настроить время поездки
+			.equ DM_MENU_WheelLength	= 10		;	- Длина колеса
+			.equ DM_MENU_TST			= 11		;	- Показать все символы экрана
+			.equ DM_MENU_EXIT			= 12		;	- Выход га верхний уровень
 
 			
 			.equ EEPROMWriteAdr			= (0b1010000<<1)|0	; //Адрес и бит квитирования для записи в EEPROM	0xA0
 			.equ EEPROMReadAdr			= (0b1010000<<1)|1	; //Адрес и бит квитирования для чтения в EEPROM	0xA1
-			.equ BME250Write			= (0b1110110<<1)|0	; //Адрес и бит квитирования для записи для датчика BME250
-			.equ BME250Read				= (0b1110110<<1)|1	; //Адрес и бит квитирования для чтения для датчика BME250
+			.equ BME250Write			= (0x76<<1)|0		; //Адрес и бит квитирования для записи для датчика BME250
+			.equ BME250Read				= (0x76<<1)|1		; //Адрес и бит квитирования для чтения для датчика BME250
+			.equ DS1307Write			= (0b1101000<<1)|0	;Модуль часов
+			.equ DS1307Read				= (0b1101000<<1)|1	;
 
 ;===========CSEG==============================================================
 			; Собственно код начинается отсюда
@@ -216,6 +262,8 @@ LCD_display_mode:.byte 1							;Режим отображения экрана
 			.include "math.inc"
 ; Тут обработка всей инфы ввода-вывода. Передача данных, приём и т.д.
 			.include "DriverIO.inc"
+; Клавиатура, всё, что с ней связано
+			.include "Keyboard.inc"
 ; Драйвер LCD экрана
 			.include "LCD_driver.inc"
 ; Повторяющиеся события
@@ -298,8 +346,8 @@ Flush:		ST 		Z+,R16
 			SBI	DDRD,6						;Установили 6 ногу на выход		обновление выхода
 			SBI	DDRD,7						;Установили 7 ногу на выход		запоминание состояний входа
 			SBI	DDRB,0						;Установили 8 ногу на выход		режим сна
-			SBI	DDRB,1						;Установили 9 ногу на выход		запрет обновления регистра сравнения
-			SBI	DDRB,5						;Установили 13 ногу на выход	строб
+			SBI	DDRB,5						;Установили 13 ногу на выход	строб для микросхемы выхода
+			SBI	DDRB,4						;Установили 12 ногу на выход	строб для микросхемы входа
 			CBI	DDRD,3						;Установили 3 ногу на вход		геркон
 
 			
@@ -314,6 +362,21 @@ Flush:		ST 		Z+,R16
 			SetTask TS_Evry_1_s_Task
 			//Запустить медленный таймер. Каждые 60 секунд, или 1 минуту один тик. Всего на 65535 минут таймер
 			SetTimerTask TS_SlowTimerService,60000 
+			//Запускаем обновление первой строки дисплея
+			SetTimerTask TS_Update_1_row_LCD,100	
+			//Запустить обновление часов
+			SetTask TS_ClockUpdate
+			//Записать часы в их место
+			STI Clock+0, '1'
+			STI Clock+1, '2'
+			STI Clock+2, ':'
+			STI Clock+3, '0'
+			STI Clock+4, '0'
+			STI Clock+5, ':'
+			STI Clock+6, '0'
+			STI Clock+7, '0'
+			//Запустить обновление погоды
+			SetTask TS_WetherInit
 
 			_LDI_32 WheelLength, 2000
 
@@ -353,88 +416,6 @@ InitMemory:
 	_CLR_32 TimeVOld
 RET
 
-
-WetherUpdate:
-	/*//Flag_1 = 0b Key1 Key2 ~ ~ ~ TWI Lamp U Temp
-	MOV		OSRG,Flag_1
-	ANDI	OSRG,0b1000		//Флаг Занятости TWI
-	BRNE	WU00
-		TWI_IO_Init BME250Write,1
-		LDI		OSRG,0xF7 //Первый регистр чтения
-		ST		Z,OSRG
-		SetTask TS_StartTWI
-		//SetTimerTask TS_WetherUpdate,60000				//Запустили погодуБ раз в минуту обновление, выше крыши
-		RET
-	WU00:
-	//Линия занята, обратитесь позже*
-	SetTimerTask TS_WetherUpdate,1*/
-RET
-
-WetherInit:
-	//Flag_1 = 0b Key1 Key2 ~ ~ ~ TWI Lamp U Temp
-	/*MOV		OSRG,Flag_1
-	ANDI	OSRG,0b1000		//Флаг Занятости TWI
-	BRNE	WI00
-		LDI 	ZL,low(TWI_IO+1)
-		LDI 	ZH,high(TWI_IO+1)
-		LD		OSRG,Z
-		SBIW	Z,1
-		CPI		OSRG,(0b1110110<<1)|1 //Если мы отправляли кодовое слово
-		BRNE	WI01
-			LDI		OSRG,3	//Регистр старта и два кодовых слова закидываем туда
-			ST		Z+,OSRG
-			LDI		OSRG,(0b1110110<<1)|0			/*В регистр данных TWDR загружаем адрес, а бит квитирования устанавливаем нулевым*//*
-			ST		Z+,OSRG
-			LDI		OSRG,0xF4		//Первый регистр - BME280_CTRL_ctrl_hum
-			ST		Z+,OSRG
-			LDI		OSRG,0x27		//регистр - BME280_CTRL_MEAS_REG
-			ST		Z+,OSRG
-			LDI		OSRG,0x00		//регистр - BME280_CONFIG_REG
-			ST		Z+,OSRG
-			SetTask TS_StartTWI
-			SetTimerTask TS_WetherUpdate,1000				//Запустили погоду, раз в минуту обновление, выше крыши
-			RET
-		WI01:
-		CPI		OSRG,(0b1110110<<1)|0 //Если мы отправляли кодовое слово
-		BRNE	WI02
-			RET
-		WI02:
-
-		LDI		OSRG,2	//Регистр старта и два кодовых слова закидываем туда
-		ST		Z+,OSRG
-		LDI		OSRG,(0b1110110<<1)|0			/*В регистр данных TWDR загружаем адрес, а бит квитирования устанавливаем нулевым*//*
-		ST		Z+,OSRG
-		LDI		OSRG,0xF2		//Первый регистр - BME280_CTRL_ctrl_hum
-		ST		Z+,OSRG
-		LDI		OSRG,0x01		//Первый регистр - BME280_CTRL_ctrl_hum
-		ST		Z+,OSRG
-		SetTask TS_StartTWI
-	WI00:
-	//Линия занята, обратитесь позже
-	SetTimerTask TS_WetherInit,1*/
-RET
-
-ClockUpdate:
-			/*//Flag_1 = 0b TWI Lamp U Temp
-			MOV		OSRG,Flag_1
-			ANDI	OSRG,0b1000		//Флаг Занятости TWI
-			BRNE	CU00
-				LDI 	ZL,low(TWI_IO)
-				LDI 	ZH,high(TWI_IO)
-				LDI		OSRG,1
-				ST		Z+,OSRG
-				LDI		OSRG,(0b1101000<<1)|0			/*В регистр данных TWDR загружаем адрес, а бит квитирования устанавливаем нулевым*//*
-				ST		Z+,OSRG
-				LDI		OSRG,0
-				ST		Z,OSRG
-				SetTask TS_StartTWI
-				SetSlowTimerTask TS_ClockUpdate,60//Один раз в час мы сверяем часы с базовой станцией
-				RET
-			CU00:
-			//Линия занята, обратитесь позже
-			SetTimerTask TS_ClockUpdate,1*/
-RET
-
 .CSEG 
 
 //ConstTemp1:				.DB 0xC4, 0xF2, 0x32, 0x03  
@@ -456,6 +437,10 @@ LCD_BIG_NUMBER_4:		.DB 0b11111,0b11111,0b00011,0b00011,0b00011,0b00011,0b11111,0
 LCD_BIG_NUMBER_5:		.DB 0b11111,0b11111,0b11000,0b11000,0b11000,0b11000,0b11111,0b11111	//с
 LCD_BIG_NUMBER_6:		.DB 0b11000,0b11000,0b11000,0b11000,0b11000,0b11000,0b11111,0b11111	// |_
 LCD_BIG_NUMBER_7:		.DB 0b11111,0b11111,0b11000,0b11000,0b11000,0b11000,0b11000,0b11000 // Г
+
+//Данные для подписей строк. Обязательно кончаются 0х00!!!!
+LCD_MAX_V:				.DB "MAX:",0x00
+LCD_ODO:				.DB "ODO",0x00
 
 
 

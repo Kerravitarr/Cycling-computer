@@ -24,13 +24,15 @@
  */ 
  .equ MUL_64_MODE_32 = 4-1
  .equ MUL_64_MODE_64 = 8-1
-
  
- //АСС(64 бит) = АСС(64 бит) * Xl(32)
+ //Флаги для знакового умножения
+ .equ MUL_64_FLAG_negA = 1 << 0
+ .equ MUL_64_FLAG_negR = 1 << 1
+ 
+ //АСС(беззнака 64 бит) = АСС(беззнака 64 бит) * Xl(беззнака 32)
  .MACRO		_MUL64_A_R32
 	LDI		MacroR,MUL_64_MODE_32
-   	LDI 	XL,low(@0)
-	LDI 	XH,high(@0)
+	LDIW 	X, @0
 	CALL	MUL64_M
 .ENDMACRO
 .MACRO		MUL64_A_R32
@@ -42,12 +44,11 @@
 	POP		XH
 	POP		XL
 .ENDMACRO
- //АСС(64 бит) = АСС(64 бит) * Xl(64)
+ //АСС(беззнака 64 бит) = АСС(беззнака 64 бит) * Xl(беззнака 64)
  .MACRO		_MUL64_A_R64
 	LDI		MacroR,MUL_64_MODE_64
-   	LDI 	XL,low(@0)
-	LDI 	XH,high(@0)
-	RCALL	MUL64_M
+	LDIW 	X, @0
+	CALL	MUL64_M
 .ENDMACRO
 .MACRO		MUL64_A_R64
 	PUSH	XL     
@@ -59,7 +60,109 @@
 	POP		XL
 .ENDMACRO
 
- MUL64_M:
+ //АСС(знаковые 64 бит) = АСС(знаковые 64 бит) * Xl(знаковые 32)
+ .MACRO		_MULS64_A_R32
+	LDI		MacroR,MUL_64_MODE_32
+	LDIW 	X, @0
+	CALL	MULS64_M
+.ENDMACRO
+.MACRO		MULS64_A_R32
+	PUSH	XL     
+	PUSH	XH
+
+	_MULS64_A_R32 @0
+
+	POP		XH
+	POP		XL
+.ENDMACRO
+ //АСС(знаковые 64 бит) = АСС(знаковые 64 бит) * Xl(знаковые 64)
+ .MACRO		_MULS64_A_R64
+	LDI		MacroR,MUL_64_MODE_64
+	LDIW 	X, @0
+	CALL	MULS64_M
+.ENDMACRO
+.MACRO		MULS64_A_R64
+	PUSH	XL     
+	PUSH	XH
+
+	_MULS64_A_R64 @0
+
+	POP		XH
+	POP		XL
+.ENDMACRO
+
+MULS64_M:
+	PUSH tmp2
+	PUSH tmp3
+	PUSH MacroR
+	MOV tmp3, MacroR //Сохраняем флаг
+
+	CLR tmp2
+	LDS MacroR, ACC_1
+	ANDI MacroR, 1 << 7
+	BREQ /*=*/ SMUL64_M_ACC_positive
+		ORI tmp2, MUL_64_FLAG_negA
+		NEG_64 ACC_1
+	SMUL64_M_ACC_positive:
+
+	LD MacroR, X
+	ANDI MacroR, 1 << 7
+	BREQ /*=*/ SMUL64_M_R_positive
+		ORI tmp2, MUL_64_FLAG_negR
+		PUSH Xl
+		PUSH Xh
+		
+			CPI tmp3, MUL_64_MODE_32
+			BREQ /*=*/ SMUL64_M_R32
+				LDI MacroR, 8
+				CALL NEG_M
+				RJMP SMUL64_M_R_end
+			SMUL64_M_R32:
+				LDI MacroR, 4
+				CALL NEG_M
+			SMUL64_M_R_end:
+			
+
+		POP Xh
+		POP Xl
+	SMUL64_M_R_positive:
+	//Теперь у нас аккумулятор и число точно положительные, а в регистре tmp3 хранится знак числа
+	POP MacroR //Достаём режим работы
+	PUSH Xl
+	PUSH Xh
+	RCALL MUL64_M//И умножаем
+	POP Xh
+	POP Xl
+	TST tmp2
+	BREQ /*=*/ MULS64_M_end //Шик, ни чего делать и не нужно!
+		//Как жаль, где-то негатив есть.
+		CPI tmp2, MUL_64_FLAG_negA | MUL_64_FLAG_negR
+		BREQ /*=*/ MULS64_M_neg2
+			//У нас только одно число негативное
+			//Значит результат тоже отрицательным будет :(
+			NEG_64 ACC_1
+			ANDI tmp2, MUL_64_FLAG_negA
+			BRNE /*!=*/ MULS64_M_end //Отрицательный - аккумулятор. Ни чего не меняем
+				//Отрицательное число. Вот его и инвертнём дальше!
+		MULS64_M_neg2:
+			//У нас оба числа негативные. А - на - даст +!
+			//Надо инвертнуть только число
+			CPI tmp3, MUL_64_MODE_32
+			BREQ /*=*/ SMUL64_M_R32_2
+				LDI MacroR, 8
+				CALL NEG_M
+				RJMP MULS64_M_end
+			SMUL64_M_R32_2:
+				LDI MacroR, 4
+				CALL NEG_M
+	MULS64_M_end:
+	POP tmp3
+	POP tmp2
+RET
+
+//Xh:Xl - второй множитель, указатель на его старшый разряд
+//MacroR - режим, в котором работает функция
+MUL64_M:
 		PUSH	r0
 		PUSH	r1
 		PUSH	r2

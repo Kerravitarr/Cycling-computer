@@ -255,6 +255,95 @@
  
  //Таймер на каждую секунду. Тут выполняются всякие не интересные операции
  Evry_1_s_Task:
+
+	//Обновляем часики
+	LDS tmp2, Clock + 7
+	INC tmp2
+	CPI tmp2, '9' + 1
+	BREQ /*=*/ Evry_1_s_Task_sec_up
+		//Просто обновляем секунды
+		STS Clock + 7, tmp2
+		RJMP Evry_1_s_Task_clock_end
+	Evry_1_s_Task_sec_up:
+		//Нужно с десятками что-то сделать, у нас переполнение единиц
+		STI Clock + 7, '0'
+		LDS tmp2, Clock + 6
+		INC tmp2
+		CPI tmp2, '5' + 1
+		BREQ /*=*/ Evry_1_s_Task_10sec_up
+			STS Clock + 6, tmp2
+			RJMP Evry_1_s_Task_clock_end
+		Evry_1_s_Task_10sec_up:
+			STI Clock + 6, '0'
+			LDS tmp2, Clock + 4
+			INC tmp2
+			CPI tmp2, '9' + 1
+			BREQ /*=*/ Evry_1_s_Task_min_up
+				STS Clock + 4, tmp2
+				RJMP Evry_1_s_Task_clock_end
+			Evry_1_s_Task_min_up:
+				STI Clock + 4, '0'
+				LDS tmp2, Clock + 3
+				INC tmp2
+				CPI tmp2, '5' + 1
+				BREQ /*=*/ Evry_1_s_Task_10min_up
+					STS Clock + 3, tmp2
+					RJMP Evry_1_s_Task_clock_end
+				Evry_1_s_Task_10min_up:
+					STI Clock + 3, '0'
+					LDS tmp2, Clock + 1
+					INC tmp2
+					CPI tmp2, '9' + 1
+					BREQ /*=*/ Evry_1_s_Task_h_up
+						STS Clock + 1, tmp2
+						RJMP Evry_1_s_Task_clock_end
+					Evry_1_s_Task_h_up:
+						STI Clock + 1, '0'
+						LDS tmp2, Clock + 0
+						INC tmp2
+						CPI tmp2, '2' + 1
+						BREQ /*=*/ Evry_1_s_Task_1h_up
+							STS Clock + 0, tmp2
+							RJMP Evry_1_s_Task_clock_end
+						Evry_1_s_Task_1h_up:
+						//У нас часы закончились. Дальше 00
+						STI Clock + 0, '0'
+	Evry_1_s_Task_clock_end:
+
+	TSTFlag F_LSD_SCAN
+	BREQ /*=*/ Evry_1_s_Task_notSCAN
+		//Режим сканирования
+		STI LSD_ROW_1_PAR -1, 'S'
+		STI LSD_ROW_2_PAR -1, 'C'
+		STI LSD_ROW_3_PAR -1, 'A'
+		STI LSD_ROW_4_PAR -1, 'N'
+
+		LDS tmp2, Clock + 7 //Берём секунды
+		CPI tmp2, '0' //Следующий режим каждые 10 секунд
+		BRNE /*!=*/ Evry_1_s_Task_notSCANend
+			LDS tmp2, LCD_display_mode
+			INC tmp2
+			CPI tmp2, DM_SCAN
+			BRNE /*!=*/ Evry_1_s_Task_nextSCAN
+				//Но и мы обнуляем строчку, у нас круг
+				STI LCD_display_mode, DM_DEFAULT
+				RJMP Evry_1_s_Task_notSCANend
+			Evry_1_s_Task_nextSCAN:
+				STS LCD_display_mode, tmp2
+		RJMP Evry_1_s_Task_notSCANend
+	Evry_1_s_Task_notSCAN:
+		STI LSD_ROW_1_PAR -1, ' '
+		STI LSD_ROW_2_PAR -1, ' '
+		STI LSD_ROW_3_PAR -1, ' '
+		STI LSD_ROW_4_PAR -1, ' '
+	Evry_1_s_Task_notSCANend:
+	
+	SetTimerTask TS_Evry_1_s_Task,1000
+ RET
+ 
+ //Функция обновления значений на первой строке дисплея
+ Update_1_row_LCD:
+	
 	//Средняя скорость = DIST * 60000 / TIME (V = S/T)
 	_LDI_A 60000
 	_MOV_32 B_32, Dist
@@ -266,18 +355,77 @@
 	//Проверим как там со скростью дела
 	_LDI_A 0
 	_CP_32 Speed, ACC_32
-	BRNE /*!=*/ Evry_1_s_Task_speed_not_0
+	BRNE /*!=*/ Update_1_row_LCD_speed_not_0
 		STI LSD_ROW_1 + 4, 'X'	//Когда скорость 0, мы сюда крест ставим
-		RJMP Evry_1_s_Task_speed_end
-	Evry_1_s_Task_speed_not_0:
-		_CP_32 Speed, AverageSpeed
-		BRLO /*<*/ Evry_1_s_Task_speed_high
-			STI LSD_ROW_1 + 4, '-'	//Когда скорость меньше
-			RJMP Evry_1_s_Task_speed_end
-		Evry_1_s_Task_speed_high:
-			STI LSD_ROW_1 + 4, '+'	//Когда скорость больше
-	Evry_1_s_Task_speed_end:
+		RJMP Update_1_row_LCD_speed_end
+	Update_1_row_LCD_speed_not_0:
+		_MOV_32 B_32, Speed
+		_SUB_32 B_32, AverageSpeed
+		LDS tmp2, B_32
+		SBRS tmp2,7
+		RJMP Update_1_row_LCD_speed_posotiv
+			//Старший бит = 1, значит у нас Speed < AverageSpeed
+			_LDI_32 C_32, -10 //На сколько маленькое число игнорируем
+			_CP_32 B_32,C_32
+			BRLO /*<*/ Update_1_row_LCD_speed_sllow
+				STI LSD_ROW_1 + 4, '='	//Когда скорость не больше чем на 10 отличается, ставим =
+				RJMP Update_1_row_LCD_speed_end
+			Update_1_row_LCD_speed_sllow:
+				STI LSD_ROW_1 + 4, '-'	//Когда скорость меньше
+				RJMP Update_1_row_LCD_speed_end
+		Update_1_row_LCD_speed_posotiv:
+			_LDI_32 C_32, 10 //На сколько маленькое число игнорируем
+			_CP_32 B_32,C_32
+			BRLO /*<*/ Update_1_row_LCD_speed_eq
+				STI LSD_ROW_1 + 4, '+'	//Когда скорость больше
+				RJMP Update_1_row_LCD_speed_end
+			Update_1_row_LCD_speed_eq:
+				STI LSD_ROW_1 + 4, '='	//Когда скорость не больше чем на 10 отличается, ставим =
+				RJMP Update_1_row_LCD_speed_end
+	Update_1_row_LCD_speed_end:
+	
+	LDIW X, LSD_ROW_1_PAR
+	LDS tmp2, LCD_display_mode
+	MOV MacroR, tmp2
+	CPI tmp2, DM_SCAN
+	BRSH /*>=*/ Update_1_row_LCD_inMenu
+		//У нас одна из строк
+		RCALL LCD_PRINT_workMode
+		RJMP Update_1_row_LCD_inMenuend
+	Update_1_row_LCD_inMenu:
+		//У нас меню
+		RCALL LCD_PRINT_menu
+	Update_1_row_LCD_inMenuend:
+	SetTimerTask TS_Update_2_row_LCD,250
+ RET
+ //Функция обновления значений на второй строке дисплея
+ Update_2_row_LCD:
+ 
+	LDIW X, LSD_ROW_2_PAR
+	LDS tmp2, LCD_display_mode
+	MOV MacroR, tmp2
+	INC MacroR
+	CPI tmp2, DM_SCAN
+	BRSH /*>=*/ Update_2_row_LCD_inMenu
+		CPI MacroR, DM_SCAN
+		BRLO /*<*/ Update_2_row_LCD_wm_not_cyc
+			SUBI MacroR, DM_SCAN//У нас зали за край, снова первую строку печатаем
+		Update_2_row_LCD_wm_not_cyc:
+		RCALL LCD_PRINT_workMode
+		RJMP Update_2_row_LCD_inMenuend
+	Update_2_row_LCD_inMenu:
+		//У нас меню
+		CPI MacroR, DM_SCAN
+		BRLO /*<*/ Update_2_row_LCD_m_not_cyc
+			SUBI MacroR, DM_SCAN//У нас зали за край, снова первую строку печатаем
+		Update_2_row_LCD_m_not_cyc:
+		RCALL LCD_PRINT_menu
+	Update_2_row_LCD_inMenuend:
 
+	SetTimerTask TS_Update_3_row_LCD,250
+ RET
+ //Функция обновления значений на третьей строке дисплея
+ Update_3_row_LCD:
 	//Теперь поставим время
 	_LDI_A 1000	//Так как время в мс, то делим эту тысячу
 	_MOV_32 B_32, TimeTrip
@@ -317,7 +465,35 @@
 	LDS tmp2, ACC_1 + 7
 	ADI tmp2, '0'
 	STS LSD_ROW_3 + 0, tmp2
+	
+	
+	LDIW X, LSD_ROW_3_PAR
+	LDS tmp2, LCD_display_mode
+	MOV MacroR, tmp2
+	ADI MacroR,2
+	CPI tmp2, DM_SCAN
+	BRSH /*>=*/ Update_3_row_LCD_inMenu
+		CPI MacroR, DM_SCAN
+		BRLO /*<*/ Update_3_row_LCD_wm_not_cyc
+			SUBI MacroR, DM_SCAN//У нас зали за край, снова первую строку печатаем
+		Update_3_row_LCD_wm_not_cyc:
+		RCALL LCD_PRINT_workMode
+		RJMP Update_3_row_LCD_inMenuend
+	Update_3_row_LCD_inMenu:
+		//У нас меню
+		CPI MacroR, DM_SCAN
+		BRLO /*<*/ Update_3_row_LCD_m_not_cyc
+			SUBI MacroR, DM_SCAN//У нас зали за край, снова первую строку печатаем
+		Update_3_row_LCD_m_not_cyc:
+		RCALL LCD_PRINT_menu
+	Update_3_row_LCD_inMenuend:
 
+	SetTimerTask TS_Update_4_row_LCD,250
+ RET
+ //Функция обновления значений на четвёртой строке дисплея
+ Update_4_row_LCD:
+
+ 
 	//Теперь одометр
 	_CLR_64 ACC_1
 	_MOV_32 ACC_32, Dist
@@ -368,12 +544,61 @@
 	ADI tmp2, '0'
 	STS LSD_ROW_4 + 0, tmp2
 	_MOV_32 B_32, ACC_32
+		
+	LDIW X, LSD_ROW_4_PAR
+	LDS tmp2, LCD_display_mode
+	MOV MacroR, tmp2
+	ADI MacroR,3
+	CPI tmp2, DM_SCAN
+	BRSH /*>=*/ Update_4_row_LCD_inMenu
+		CPI MacroR, DM_SCAN
+		BRLO /*<*/ Update_4_row_LCD_wm_not_cyc
+			SUBI MacroR, DM_SCAN//У нас зали за край, снова первую строку печатаем
+		Update_4_row_LCD_wm_not_cyc:
+		CALL LCD_PRINT_workMode
+		RJMP Update_4_row_LCD_inMenuend
+	Update_4_row_LCD_inMenu:
+		//У нас меню
+		CPI MacroR, DM_SCAN
+		BRLO /*<*/ Update_4_row_LCD_m_not_cyc
+			SUBI MacroR, DM_SCAN//У нас зали за край, снова первую строку печатаем
+		Update_4_row_LCD_m_not_cyc:
+		CALL LCD_PRINT_menu
+	Update_4_row_LCD_inMenuend:
 
-	
-	SetTimerTask TS_Evry_1_s_Task,200
+	SetTimerTask TS_Update_1_row_LCD,250
  RET
 
 
+//Функция обновления часов. 
+ClockUpdate:
+	TSTFlag TWI_Busy
+	BRNE	CU_busy
+		STI TWI_IO+0, DS1307Write
+		STI TWI_IO+1, 0	
+		STI TWI_IOl, 2 ;Записываем 2 регистра - адрес и чтение будем осуществлять с 0
+		CALL StartTWI
+		SetSlowTimerTask TS_ClockUpdate,60//Один раз в час мы сверяем часы с базовой станцией
+		RET
+	CU_busy:
+	//Линия занята, обратитесь позже
+	SetTimerTask TS_ClockUpdate,1
+RET
+
+//Функция обновления погоды
+WetherUpdate:
+	TSTFlag TWI_Busy
+	BRNE	WU00
+		STI TWI_IO+0, BME250Write
+		STI TWI_IO+1, BME_ADR_status //Читать будем от статуса и далее
+		STI TWI_IOl, 2 ;Записываем 2 регистра - адрес и чтение будем осуществлять с 0
+		CALL StartTWI
+		SetTimerTask TS_WetherUpdate,1000//Один раз в минуту обновляться - за глаза и за уши!
+		RET
+	WU00:
+	//Линия занята, обратитесь позже*
+	SetTimerTask TS_WetherUpdate,1
+RET
 
 
 //Flag_1 = 0b Key1 Key2 MENU UART TWI Lamp U Temp
