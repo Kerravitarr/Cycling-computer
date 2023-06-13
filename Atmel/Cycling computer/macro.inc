@@ -79,3 +79,15 @@
 	LDI    @0L, LOW(@1)
 	LDI    @0H, HIGH(@1)
 .ENDMACRO
+
+//Кладёт в память длинное число длинное число. PUSH @0
+.MACRO PUSHW
+	PUSH    @0L
+	PUSH    @0H
+.ENDMACRO
+
+//Достаёт из памяти длинное число. POP @0
+.MACRO POPW
+	POP    @0H
+	POP    @0L
+.ENDMACRO

@@ -185,7 +185,9 @@ ReedSwitch_E:
 	
 	//Проверяем - мы двигаемся?
 	TSTFlag isMove
-	BREQ /*=*/ ReedSwitch_E_not_move
+	BRNE /*!=*/ ReedSwitch_E_move
+		RJMP ReedSwitch_E_not_move
+	ReedSwitch_E_move:
 		//Тогда находим нашу мгновенную скорость
 		//Мы знаем время оборота в мс или мс/оборот, а нужно в скорость перевести - оборотв/мин. Поэтому надо 60'000 / T 
 		//Обороты в минуту, потому что целочисленное деление
@@ -195,6 +197,9 @@ ReedSwitch_E:
 			_SUB_32 B_32, TimeVOld
 			_DIV_64_A_DIV_R32 B_32
 			_MOV_32 Speed, ACC_32
+			_CP_32 MaxSpeed, Speed
+			BRSH /*>=*/ ReedSwitch_E_not_move
+				_MOV_32 MaxSpeed, Speed
 			RJMP ReedSwitch_E_not_move
 		ReedSwitch_E_max_V:
 			_LDI_32 Speed, 999
@@ -231,37 +236,6 @@ TWI_IO_End:
 			RJMP TWI_IO_End_end
 		TIE_not_br:
 
-		/*CPI		OSRG,(0b1010000<<1)|1
-		BRNE	TIE02
-			//Работаем с будильниками. Для этого у нас есть флаговый бит, это двоеточие в 00:00
-			//RCALL TWI_IO_End_EEPROM_Read
-			RJMP TIE00
-		TIE02:
-		CPI		OSRG,(0b1110110<<1)|1
-		BRNE	TIE03
-			//RCALL TWI_IO_End_Wether_Read
-			RJMP TIE00
-		TIE03:
-
-		CPI		OSRG,(0b1101000<<1)|0
-		BRNE	TOE01
-			//CALL TWI_IO_End_Clock_Write
-			RJMP TIE00
-		TOE01:
-
-		CPI		OSRG,EEPROMWriteAdr
-		BRNE	TIE10
-			//CALL TWI_IO_End_EEPROM_Write
-			RJMP TIE00
-		TIE10:
-
-		CPI		OSRG,(0b1110110<<1)|0
-		BRNE	TIE20
-			//CALL TWI_IO_End_Wether_Write
-			RJMP TIE00
-		TIE20:
-
-		TIE00:*/
 		TWI_IO_End_end:
 RET
 //Файлы драйверов

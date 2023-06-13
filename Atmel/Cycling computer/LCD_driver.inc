@@ -592,28 +592,36 @@ RET
 //А теперь фукнции печати в дисплей
 
 //Копирует строки из программной памяти в строку
-//Х - куда вставляем
+//Z - куда вставляем
 //@0 откуда берём
 .MACRO _LCD_COP_FROM_MEM
-	LDIW Z, @0 * 2
+	LDIW X, @0 * 2
 	RCALL LCD_COP_FROM_MEM_M
 .ENDMACRO
 .MACRO LCD_COP_FROM_MEM
-	PUSH Zl
-	PUSH Zh
+	PUSH Xl
+	PUSH Xh
 		_LCD_COP_FROM_MEM @0
-	POP Zh
-	POP Zl
+	POP Xh
+	POP Xl
 .ENDMACRO
 
 LCD_COP_FROM_MEM_M:
-	LPM MacroR, Z+
-	TST MacroR
-	BREQ /*=*/ LCD_COP_FROM_MEM_M_RET
-	ST X+, MacroR
-	RJMP LCD_COP_FROM_MEM_M
+	PUSH Yl
+	PUSH Yh
+		MOVW Y,Z
+		MOVW Z,X
+		LCD_COP_FROM_MEM_Loop:
+			LPM MacroR, Z+
+			TST MacroR
+			BREQ /*=*/ LCD_COP_FROM_MEM_M_RET
+			ST Y+, MacroR
+		RJMP LCD_COP_FROM_MEM_Loop
 
-	LCD_COP_FROM_MEM_M_RET:
+		LCD_COP_FROM_MEM_M_RET:
+		MOVW Z,Y
+	POP Yh
+	POP Yl
 RET
 
 //Печатает в строку нужные данные. Рабочий режим - строки со средней скорость, температурой и т.д.
@@ -661,22 +669,55 @@ RET
 //MacroR - номер печатоемой строки
 //Х - адрес строки, куда печатаем
 LCD_PRINT_menu:
-	
+	PUSH Zl
+	PUSH Zh
+		MOV tmp3, MacroR
+
+		CPI MacroR, DM_MENU_RESTART
+		BRNE /*!=*/ LCD_PRINT_menuNR
+			RCALL LCD_PRINT_W_RESTART
+			RJMP LCD_PRINT_end
+		LCD_PRINT_menuNR:
+		CPI MacroR, DM_MENU_WheelLength
+		BRNE /*!=*/ LCD_PRINT_menuWL
+			RCALL LCD_PRINT_M_C
+			RJMP LCD_PRINT_end
+		LCD_PRINT_menuWL:
+		CPI MacroR, DM_MENU_TIME_TRIP
+		BRNE /*!=*/ LCD_PRINT_menuTT
+			RCALL LCD_PRINT_M_LeftTD
+			RJMP LCD_PRINT_end
+		LCD_PRINT_menuTT:		
+		CPI MacroR, DM_MENU_TST
+		BRNE /*!=*/ LCD_PRINT_menuT
+			RCALL LCD_PRINT_SYM
+			RJMP LCD_PRINT_end
+		LCD_PRINT_menuT:		
+		CPI MacroR, DM_MENU_EXIT
+		BRNE /*!=*/ LCD_PRINT_menuEX
+			RCALL LCD_PRINT_EXIT
+			RJMP LCD_PRINT_end
+		LCD_PRINT_menuEX:		
+
+
+		
+		LCD_PRINT_end:
+	POP Zh
+	POP Zl
+	LDS tmp2, LCD_display_mode
+	CPSE tmp3, tmp2
+		RET
+	//Мигает только первая строка
+	RCALL LCD_BLINK
 RET
 
  //Печатает в строку среднюю скорость.
- //Адрес строки в X
+ //Адрес строки в Z
  LCD_PRINT_AVR_V:
-	LDI tmp2, 'A'
-	ST	X+, tmp2
-	LDI tmp2, 'V'
-	ST	X+, tmp2
-	LDI tmp2, 'R'
-	ST	X+, tmp2
-	LDI tmp2, ' '
-	ST	X+, tmp2
-	PUSH Xl
-	PUSH Xh
+	RCALL LCD_PRINT_CLR_ROW
+	_LCD_COP_FROM_MEM LCD_AVR
+	PUSH Zl
+	PUSH Zh
 
 		//Теперь у нас есть средняя скорость в оборотах/минуту. А нам что нужно? км/ч!
 		_CLR_64 ACC_1
@@ -693,178 +734,178 @@ RET
 		_DIV_64_R32_DIV_A B_32 //Мы делим AverageSpeed на 10. Получаем в итоге скорость + её десятую часть.
 								//ACC_32 теперь содержит скорость
 								//ACC_2 содержит число после запятой
-	POP Xh
-	POP Xl
+	POP Zh
+	POP Zl
 
-	ADIW X, 4 //Мы теперь будем дописывать с конца
+	ADIW Z, 4 //Мы теперь будем дописывать с конца
 	
 	LDS tmp2, ACC_2 + 7
 	ADI tmp2, '0'
-	ST	-X, tmp2
+	ST	-Z, tmp2
 	//Теперь единицы
-	MOV_32 B_32, ACC_32
-	LDI_A 10
-	DIV_64_R32_DIV_A B_32 
+	_MOV_32 B_32, ACC_32
+	_LDI_A 10
+	_DIV_64_R32_DIV_A B_32 
 	LDI tmp2, '.'
-	ST	-X, tmp2
+	ST	-Z, tmp2
 	LDS tmp2, ACC_2 + 7
 	ADI tmp2, '0'
-	ST	-X, tmp2
+	ST	-Z, tmp2
 	//Теперь десятки
 	LDS tmp2, ACC_1 + 7
 	ADI tmp2, '0'
-	ST	-X, tmp2
+	ST	-Z, tmp2
  RET
  
  //Печатает в строку текущее время
- //Адрес строки в X
+ //Адрес строки в Z
  LCD_PRINT_TIME:
 	RCALL LCD_PRINT_CLR_ROW
 	LDI tmp2, 'T'
-	ST	X+, tmp2
+	ST	Z+, tmp2
 	LDI tmp2, ' '
-	ST	X+, tmp2
+	ST	Z+, tmp2
  
-	LDIW Y, Clock
+	LDIW X, Clock
 	LDI Counter, 8
 	LCD_PRINT_TIME_l:
-		LD tmp2, Y+
-		ST X+, tmp2
+		LD tmp2, X+
+		ST Z+, tmp2
 		DEC Counter
 	BRNE /*!=*/ LCD_PRINT_TIME_l
  RET
 
  //Печатает в строку температуру
- //Адрес строки в X
+ //Адрес строки в Z
  LCD_PRINT_T:
 	RCALL LCD_PRINT_CLR_ROW
 	LDI tmp2, 'T'
-	ST	X+, tmp2
+	ST	Z+, tmp2
 	LDI tmp2, ':'
-	ST	X+, tmp2
-	ADIW X,6 //Дальше мы число пишем сзади. При этом! У нас функции с предекрементом!
+	ST	Z+, tmp2
+	ADIW Z,6 //Дальше мы число пишем сзади. При этом! У нас функции с предекрементом!
 
-	CLR_64 ACC_1
+	_CLR_64 ACC_1
 	LDS tmp2, Temperature + 0
 	STS ACC_32 + 2, tmp2
 	LDS tmp2, Temperature + 1
 	STS ACC_32 + 3, tmp2
 
 	LDI_32 B_32, 10
-	DIV_64_A_DIV_R32 B_32
+	_DIV_64_A_DIV_R32 B_32
 	LDS tmp2, ACC_2 + 7
 	ADI tmp2, '0'
-	ST	-X, tmp2
-	DIV_64_A_DIV_R32 B_32
+	ST	-Z, tmp2
+	_DIV_64_A_DIV_R32 B_32
 	LDS tmp2, ACC_2 + 7
 	ADI tmp2, '0'
-	ST	-X, tmp2
+	ST	-Z, tmp2
 	LDI tmp2, '.'
-	ST	-X, tmp2
-	DIV_64_A_DIV_R32 B_32
+	ST	-Z, tmp2
+	_DIV_64_A_DIV_R32 B_32
 	LDS tmp2, ACC_2 + 7
 	ADI tmp2, '0'
-	ST	-X, tmp2
-	DIV_64_A_DIV_R32 B_32
+	ST	-Z, tmp2
+	_DIV_64_A_DIV_R32 B_32
 	LDS tmp2, ACC_2 + 7
 	ADI tmp2, '0'
-	ST	-X, tmp2
-	ADIW X,6 //Перескакиваем через число
+	ST	-Z, tmp2
+	ADIW Z,6 //Перескакиваем через число
 	LDI tmp2, 'C'
-	ST	X+, tmp2
+	ST	Z+, tmp2
 
  RET
  //Печатает в строку Давление
- //Адрес строки в X
+ //Адрес строки в Z
  LCD_PRINT_P:
 	RCALL LCD_PRINT_CLR_ROW
 	LDI tmp2, 'P'
-	ST	X+, tmp2
+	ST	Z+, tmp2
 	LDI tmp2, ':'
-	ST	X+, tmp2
-	ADIW X,4 //Дальше мы число пишем сзади. При этом! У нас функции с предекрементом!
+	ST	Z+, tmp2
+	ADIW Z,4 //Дальше мы число пишем сзади. При этом! У нас функции с предекрементом!
 
-	CLR_64 ACC_1
+	_CLR_64 ACC_1
 	LDS tmp2, Pressure + 0
 	STS ACC_32 + 2, tmp2
 	LDS tmp2, Pressure + 1
 	STS ACC_32 + 3, tmp2
 
-	LDI_32 B_32, 10
-	DIV_64_A_DIV_R32 B_32
+	_LDI_32 B_32, 10
+	_DIV_64_A_DIV_R32 B_32
 	LDS tmp2, ACC_2 + 7
 	ADI tmp2, '0'
-	ST	-X, tmp2
-	DIV_64_A_DIV_R32 B_32
+	ST	-Z, tmp2
+	_DIV_64_A_DIV_R32 B_32
 	LDS tmp2, ACC_2 + 7
 	ADI tmp2, '0'
-	ST	-X, tmp2
-	DIV_64_A_DIV_R32 B_32
+	ST	-Z, tmp2
+	_DIV_64_A_DIV_R32 B_32
 	LDS tmp2, ACC_2 + 7
 	ADI tmp2, '0'
-	ST	-X, tmp2
-	ADIW X,4 //Перескакиваем через число
+	ST	-Z, tmp2
+	ADIW Z,4 //Перескакиваем через число
 	LDI tmp2, 'm'
-	ST	X+, tmp2
-	ST	X+, tmp2
+	ST	Z+, tmp2
+	ST	Z+, tmp2
 
  RET
  //Печатает в строку Влажность
- //Адрес строки в X
+ //Адрес строки в Z
  LCD_PRINT_H:
 	RCALL LCD_PRINT_CLR_ROW
 	LDI tmp2, 'H'
-	ST	X+, tmp2
+	ST	Z+, tmp2
 	LDI tmp2, ':'
-	ST	X+, tmp2
-	ADIW X,3 //Дальше мы число пишем сзади. При этом! У нас функции с предекрементом!
+	ST	Z+, tmp2
+	ADIW Z,3 //Дальше мы число пишем сзади. При этом! У нас функции с предекрементом!
 
-	CLR_64 ACC_1
+	_CLR_64 ACC_1
 	LDS tmp2, Humidity + 0
 	STS ACC_32 + 3, tmp2
 
-	LDI_32 B_32, 10
-	DIV_64_A_DIV_R32 B_32
+	_LDI_32 B_32, 10
+	_DIV_64_A_DIV_R32 B_32
 	LDS tmp2, ACC_2 + 7
 	ADI tmp2, '0'
-	ST	-X, tmp2
-	DIV_64_A_DIV_R32 B_32
+	ST	-Z, tmp2
+	_DIV_64_A_DIV_R32 B_32
 	LDS tmp2, ACC_2 + 7
 	ADI tmp2, '0'
-	ST	-X, tmp2
-	ADIW X,3 //Перескакиваем через число
+	ST	-Z, tmp2
+	ADIW Z,3 //Перескакиваем через число
 	LDI tmp2, ' '
-	ST	X+, tmp2
+	ST	Z+, tmp2
 	LDI tmp2, '%'
-	ST	X+, tmp2
+	ST	Z+, tmp2
  RET
  //Печатает в строку одометр
- //Адрес строки в X
+ //Адрес строки в Z
  LCD_PRINT_ODO:
 	PUSH tmp2
 	PUSH tmp3
 	PUSH Counter
 		RCALL LCD_PRINT_CLR_ROW
 		_LCD_COP_FROM_MEM LCD_ODO
-		ADIW X,7 //Дальше мы число из 4х символов пишем сзади функцией с преддекрементом
-		PUSH Xl
-		PUSH Xh
+		ADIW Z,7 //Дальше мы число из 4х символов пишем сзади функцией с преддекрементом
+		PUSH Zl
+		PUSH Zh
 
-			MOV_32 ACC_32, Odometr
+			_MOV_32 ACC_32, Odometr
 			EXP_64_F_32 ACC_1
-			MUL64_A_R32 WheelLength //Умножаем на длину колеса, чтобы получить расстояние в мм
-			LDI_32 B_32, 1000 
-			DIV_64_A_DIV_R32 B_32//Переводим в метры
-			LDI_32 B_32, 10
-			LDI_32 C_32, 100000 //Максимально 5 знаков
+			_MUL64_A_R32 WheelLength //Умножаем на длину колеса, чтобы получить расстояние в мм
+			_LDI_32 B_32, 1000 
+			_DIV_64_A_DIV_R32 B_32//Переводим в метры
+			_LDI_32 B_32, 10
+			_LDI_32 C_32, 100000 //Максимально 5 знаков
 
 			CLR tmp3
 			LCD_PRINT_ODO_del:
-				CP_32 ACC_32, C_32
+				_CP_32 ACC_32, C_32
 				BRLO /*<*/ LCD_PRINT_ODO_print
 				//Пока у нас не меньше, мы делим на 10 и считаем сколько сократили знаков
 				INC tmp3
-				DIV_64_A_DIV_R32 B_32
+				_DIV_64_A_DIV_R32 B_32
 				RJMP LCD_PRINT_ODO_del
 			LCD_PRINT_ODO_print:
 			LDI MacroR, 3
@@ -873,35 +914,35 @@ RET
 			PUSH tmp3
 				LDI Counter,5
 				LCD_PRINT_ODO_loop_m:
-					DIV_64_A_DIV_R32 B_32
+					_DIV_64_A_DIV_R32 B_32
 					LDS tmp2, ACC_2 + 7
 					ADI tmp2, '0'
-					ST	-X, tmp2
+					ST	-Z, tmp2
 					DEC tmp3
 					BRNE /*!=*/ LCD_PRINT_ODO_l_npd
 						//Когда счётчик обнулится - надо запятую поставить
 						CPI Counter, 1
 						BREQ /*=*/ LCD_PRINT_ODO_l_npd //НО! Чтобы нам не поставить запятую перед пустотой, мы делаем ещё одну проверку
 						LDI tmp2, '.'
-						ST	-X, tmp2
+						ST	-Z, tmp2
 					LCD_PRINT_ODO_l_npd:
 					DEC Counter
 				BRNE /*!=*/ LCD_PRINT_ODO_loop_m
 			POP tmp3
-		POP Xh
-		POP Xl
+		POP Zh
+		POP Zl
 	POP Counter
 	POP tmp3
 	POP tmp2
  RET
 
  //Печатает в строку максимальную скорость
- //Адрес строки в X
+ //Адрес строки в Z
  LCD_PRINT_MAX_V:
 	RCALL LCD_PRINT_CLR_ROW
 	_LCD_COP_FROM_MEM LCD_MAX_V
-	PUSH Xl
-	PUSH Xh
+	PUSH Zl
+	PUSH Zh
 
 		//Теперь у нас есть средняя скорость в оборотах/минуту. А нам что нужно? км/ч!
 		_CLR_64 ACC_1
@@ -918,41 +959,36 @@ RET
 		_DIV_64_R32_DIV_A B_32 //Мы делим MaxSpeed на 10. Получаем в итоге скорость + её десятую часть.
 								//ACC_32 теперь содержит скорость
 								//ACC_2 содержит число после запятой
-	POP Xh
-	POP Xl
+	POP Zh
+	POP Zl
 
-	ADIW X, 4 //Мы теперь будем дописывать с конца
+	ADIW Z, 4 //Мы теперь будем дописывать с конца
 	
 	LDS tmp2, ACC_2 + 7
 	ADI tmp2, '0'
-	ST	-X, tmp2
+	ST	-Z, tmp2
 	//Теперь единицы
-	MOV_32 B_32, ACC_32
-	LDI_A 10
-	DIV_64_R32_DIV_A B_32 
+	_MOV_32 B_32, ACC_32
+	_LDI_A 10
+	_DIV_64_R32_DIV_A B_32 
 	LDI tmp2, '.'
-	ST	-X, tmp2
+	ST	-Z, tmp2
 	LDS tmp2, ACC_2 + 7
 	ADI tmp2, '0'
-	ST	-X, tmp2
+	ST	-Z, tmp2
 	//Теперь десятки
 	LDS tmp2, ACC_1 + 7
 	ADI tmp2, '0'
-	ST	-X, tmp2
+	ST	-Z, tmp2
  RET
 
  
  //Печатает в строку все символы
- //Адрес строки в X
+ //Адрес строки в Z
  LCD_PRINT_SYM:
 	RCALL LCD_PRINT_CLR_ROW
-	LDI tmp2, 'T'
-	ST	X+, tmp2
-	LDI tmp2, 'S'
-	ST	X+, tmp2
-	LDI tmp2, 'T'
-	ST	X+, tmp2
-	ADIW X, 1//пробел
+	_LCD_COP_FROM_MEM LCD_TST
+	ADIW Z, 1//пробел
 
 	LDS tmp3, Clock + 4 //Берём минуты
 	SUBI tmp3, '0'//в число
@@ -984,7 +1020,7 @@ RET
 	LCD_PRINT_1sAsS:
 		ADI tmp2, 'A' - 10 // tmp2 + 'A' - 10
 	LCD_PRINT_1send:
-	ST	X+, tmp2
+	ST	Z+, tmp2
 	MOV tmp2, tmp3
 	ANDI tmp2, 0x0F
 	CPI tmp2, 9 + 1
@@ -995,27 +1031,165 @@ RET
 	LCD_PRINT_2sAsS:
 		ADI tmp2, 'A' - 10
 	LCD_PRINT_2send:
-	ST	X+, tmp2
+	ST	Z+, tmp2
 
 	LDI tmp2, ' '
-	ST	X+, tmp2
-	ST	X+, tmp3
+	ST	Z+, tmp2
+	ST	Z+, tmp3
  RET
 
  //В Х адрес строки. Очищает строку, заполняя её проблемами
  LCD_PRINT_CLR_ROW:
-	PUSH Xl
-	PUSH Xh
+	PUSH Zl
+	PUSH Zh
 	PUSH Counter
 	PUSH tmp3
 		LDI Counter, LSD_ROW_LENGHT / 2 //Половина строки отдана под печать данных!
 		LDI tmp3, ' '
 		LCD_PRINT_CLR_ROW_l:
-			ST X+, tmp3
+			ST Z+, tmp3
 			DEC Counter
 		BRNE /*!=*/ LCD_PRINT_CLR_ROW_l
 	POP tmp3
 	POP Counter
-	POP Xh
-	POP Xl
+	POP Zh
+	POP Zl
+ RET
+ 
+ //Мигает одним из символов на экране.
+ //В Z адрес начала строки
+ LCD_BLINK:
+	TSTFlag F_LSD_isBlink
+	BREQ /*=*/ LCD_BLINK_notBlink
+		PUSH Zl
+		PUSH Zh
+			LDS tmp2,LCD_cursor_pos
+			ADD Zl,tmp2
+			ADC Zh,Const0
+			LDI tmp2, 0xFF
+			ST Z, tmp2
+		POP Zl
+		POP Zh
+	LCD_BLINK_notBlink:
+ RET
+
+ //===================Работа с меню!=================
+ LCD_PRINT_W_RESTART:
+	RCALL LCD_PRINT_CLR_ROW
+	_LCD_COP_FROM_MEM LCD_M_RST
+ RET
+
+ LCD_PRINT_EXIT:
+	RCALL LCD_PRINT_CLR_ROW
+	_LCD_COP_FROM_MEM LCD_M_EXIT
+ RET
+
+ //Печатает длину колеса
+ LCD_PRINT_M_C:
+	RCALL LCD_PRINT_CLR_ROW
+	_LCD_COP_FROM_MEM LCD_M_C
+	ADIW Z, 4 //4 символа пишем
+
+	_MOV_32 ACC_32,WheelLength
+	EXP_64_F_32 ACC_1
+	_LDI_32 B_32, 10
+	_DIV_64_A_DIV_R32 B_32
+	LDS tmp2, ACC_2 + 7
+	ADI tmp2, '0'
+	ST	-Z, tmp2
+	_DIV_64_A_DIV_R32 B_32
+	LDS tmp2, ACC_2 + 7
+	ADI tmp2, '0'
+	ST	-Z, tmp2
+	_DIV_64_A_DIV_R32 B_32
+	LDS tmp2, ACC_2 + 7
+	ADI tmp2, '0'
+	ST	-Z, tmp2
+	LDS tmp2, ACC_1 + 7
+	ADI tmp2, '0'
+	ST	-Z, tmp2
+
+	ADIW Z, 4 //Возвращаемся
+	LDI tmp2, 'm'
+	ST	Z+, tmp2
+	ST	Z+, tmp2
+ RET
+
+ //Печатает цель для дистанции/времени поездки
+ LCD_PRINT_M_LeftTD:
+	RCALL LCD_PRINT_CLR_ROW
+	LDI tmp2, 'L'
+	ST	Z+, tmp2
+	TSTFlag F_isTLeft
+	BRNE /*!=*/ LCD_PRINT_M_LeftTDLeftT
+		RJMP LCD_PRINT_M_LeftTDLeftD
+	LCD_PRINT_M_LeftTDLeftT:
+		//Цель в секундах
+		LDI tmp2, 'T'
+		ST	Z+, tmp2
+
+		ADIW Z, 5 //Переходм в конец числа
+
+		_MOV_32 ACC_32, LeftTimeDist
+		EXP_64_F_32 ACC_1
+		_LDI_32 B_32, 60	//Убираем секунды нафиг
+		_DIV_64_A_DIV_R32 B_32
+		_LDI_32 B_32, 10
+		_DIV_64_A_DIV_R32 B_32 //Мы делим время на 10. Получаем в итоге десятки минкут + сами минкуты
+		LDS tmp2, ACC_2 + 7
+		ADI tmp2, '0'
+		ST	-Z, tmp2
+		_LDI_32 B_32, 6
+		_DIV_64_A_DIV_R32 B_32 //Теперь часф и десятки минут
+		LDS tmp2, ACC_2 + 7
+		ADI tmp2, '0'
+		ST	-Z, tmp2
+		LDI tmp2, ':'
+		ST	-Z, tmp2
+		_LDI_32 B_32, 10
+		_DIV_64_A_DIV_R32 B_32//Теперь десятки часов и часы
+		LDS tmp2, ACC_2 + 7
+		ADI tmp2, '0'
+		ST	-Z, tmp2
+		LDS tmp2, ACC_1 + 7
+		ADI tmp2, '0'
+		ST	-Z, tmp2
+
+		ADIW Z, 5 //Возвращаемся
+		LCD_COP_FROM_MEM LCD_M_MIN
+
+		
+		RET
+	LCD_PRINT_M_LeftTDLeftD:
+		//Цель в оборотах - расстоянии
+		LDI tmp2, 'D'
+		ST	Z+, tmp2
+		
+		_MOV_32 ACC_32,WheelLength
+		EXP_64_F_32 ACC_1
+		_MUL64_A_R32 LeftTimeDist
+
+		_LDI_32 B_32, 1000000 //Переводим мм в км
+		_DIV_64_A_DIV_R32 B_32
+
+		ADIW Z, 4 //Переходм в конец числа
+		_LDI_32 B_32, 10
+		_DIV_64_A_DIV_R32 B_32
+		LDS tmp2, ACC_2 + 7
+		ADI tmp2, '0'
+		ST	-Z, tmp2
+		_DIV_64_A_DIV_R32 B_32
+		LDS tmp2, ACC_2 + 7
+		ADI tmp2, '0'
+		ST	-Z, tmp2
+		LDS tmp2, ACC_1 + 7
+		ADI tmp2, '0'
+		ST	-Z, tmp2
+
+		ADIW Z, 4 //Возвращаемся
+		LDI tmp2, 'k'
+		ST	Z+, tmp2
+		LDI tmp2, 'm'
+		ST	Z+, tmp2
+		//RET
  RET

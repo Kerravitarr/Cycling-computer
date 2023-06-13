@@ -169,16 +169,15 @@ MUL64_M:
 		PUSH	r3
 		PUSH	r4
 		PUSH	r5
-		PUSH	YL
-		PUSH	YH
+		PUSHW	Y
+		PUSHW	Z
 		PUSH	Counter
 		
 		MOV		r4, MacroR //Запомнили длину второго множителя
 		MOV_64	TMP_64, ACC_1	//Второе число
 		CLR_64	ACC_1			//Произведение = 0
 		CLR_64	ACC_2			//Вспомогательный регистр в 0 тоже
-		LDI 	YL,low(TMP_64 + 7 + 1)
-		LDI 	YH,high(TMP_64 + 7 + 1)	//Отсюда будем брать результат
+		LDIW 	Y,TMP_64 + 7 + 1	//Отсюда будем брать результат
 								//А эти странные + 1, так как у нас есть команда с предекрементом, а нужен постдекремент. Увы и ах
 		CLR		MacroR
 		ADD		Xl,r4
@@ -197,7 +196,7 @@ MUL64_M:
 			BRNE /*!=*/ MUL64_M_R_not0
 				//У нас в r0 = 0, то есть я заранее готов дать ответ
 				// чему будет равен результат
-				ADIW Z,1
+				SBIW Z,1
 				RJMP MUL64_M_R_for_0
 			MUL64_M_R_not0:
 				LDI	Counter,8		//Сохранили длину аккумулятора
@@ -235,8 +234,8 @@ MUL64_M:
 
 		
 		POP	Counter
-		POP		YH
-		POP		YL
+		POPW	Z
+		POPW	X
 		POP		r5
 		POP		r4
 		POP		r3

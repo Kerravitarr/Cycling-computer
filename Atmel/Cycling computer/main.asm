@@ -45,7 +45,7 @@
 			.def Ah		 = r5				; Промежуточный регистр А		;
 			.def Bl		 = r6				; Промежуточный регистр B			;
 			.def Bh		 = r7				; Промежуточный регистр B		;	
-			.def r8_	 = r8				;		
+			.def Const0	 = r8				; Всегда 0. Если этот регистр не используется в каких ни будь сложных вычислениях		
 			.def r9_	 = r9				;		
 			.def r10_	 = r10				;		
 			.def r11_	 = r11				;		
@@ -79,6 +79,7 @@ Flag_2:		.byte 1							;Флаги из памяти
 			.equ 	LSD_SCAN		= 3				; Флаг сканирования. Меняет на экране строки отображения по кругу
 			.equ 	F_LSD_SCAN		= 4				; Флаг сканирования строки, чтобы менялись циферки автоматом
 			.equ 	F_LSD_isBlink	= 5				; При меню, показывает - мигать курсором или нет
+			.equ 	F_isTLeft		= 6				;Если 1, то у нас оставшаяся дистанция/время - время. А иначе - дистанция. Переменная одна, а этот флаг показывает что там лежит
 
 
 			.equ 	TaskQueueSize	= 30			; Размер очереди событий
@@ -103,11 +104,12 @@ LSD_ROW_1:	.byte 	LSD_ROW_LENGHT					; Строка экрана
 LSD_ROW_2:	.byte 	LSD_ROW_LENGHT					; Строка экрана
 LSD_ROW_3:	.byte 	LSD_ROW_LENGHT					; Строка экрана
 LSD_ROW_4:	.byte 	LSD_ROW_LENGHT					; Строка экрана
+			.equ	LSD_MENU_ROW_LENGHT = LSD_ROW_LENGHT / 2;Сколько длины занимает правая часть экрана
 					;А эти переменные указывают откуда можно писать дополнительные параметры на экран
-			.equ	LSD_ROW_1_PAR = LSD_ROW_1 + LSD_ROW_LENGHT / 2
-			.equ	LSD_ROW_2_PAR = LSD_ROW_2 + LSD_ROW_LENGHT / 2
-			.equ	LSD_ROW_3_PAR = LSD_ROW_3 + LSD_ROW_LENGHT / 2
-			.equ	LSD_ROW_4_PAR = LSD_ROW_4 + LSD_ROW_LENGHT / 2
+			.equ	LSD_ROW_1_PAR = LSD_ROW_1 + LSD_MENU_ROW_LENGHT
+			.equ	LSD_ROW_2_PAR = LSD_ROW_2 + LSD_MENU_ROW_LENGHT
+			.equ	LSD_ROW_3_PAR = LSD_ROW_3 + LSD_MENU_ROW_LENGHT
+			.equ	LSD_ROW_4_PAR = LSD_ROW_4 + LSD_MENU_ROW_LENGHT
 
 			.equ 	WordInSize			= 1			; Количество регистров ввода
 WordIn:		.byte 	WordInSize*2					; Адреса слов
@@ -165,7 +167,7 @@ MaxSpeed:	.byte 	4								; Максимальная скорость оборо
 Kaden:		.byte 	4								; Каденс
 KadenMax:	.byte 	4								; Каденс максимальный
 KadenAverage:.byte 	4								; Каденс средний
-LeftTimeDist:.byte 	4								; Оставшееся время (мс) или расстояние (мм)
+LeftTimeDist:.byte 	4								; Оставшееся время (с) или расстояние (обороты)
 Degrees:	.byte 	1								; Угол подъёма, причём +-!
 Height:		.byte	2								;Высота, м
 Clock:		.byte 	8								;Тут у нас храняться часы. HH:MM:SS
@@ -237,10 +239,11 @@ LCD_display_mode:.byte 1							;Режим отображения экрана
 			.equ DM_SCAN				= 7			;Сколько у нас всего строк показывает это число
 			.equ DM_MENU				= 8			;Пункты меню:
 			.equ DM_MENU_RESTART		= 8			;	- обновить поездку
-			.equ DM_MENU_TIME_TRIP		= 9			;	- Настроить время поездки
+			.equ DM_MENU_TIME_TRIP		= 9			;	- Настроить желаемое время/дистанцию поездки
 			.equ DM_MENU_WheelLength	= 10		;	- Длина колеса
 			.equ DM_MENU_TST			= 11		;	- Показать все символы экрана
 			.equ DM_MENU_EXIT			= 12		;	- Выход га верхний уровень
+			.equ DM_MENU_END			= 13		;До какого числа (не включительно) существует меню
 
 			
 			.equ EEPROMWriteAdr			= (0b1010000<<1)|0	; //Адрес и бит квитирования для записи в EEPROM	0xA0
@@ -350,10 +353,6 @@ Flush:		ST 		Z+,R16
 			SBI	DDRB,4						;Установили 12 ногу на выход	строб для микросхемы входа
 			CBI	DDRD,3						;Установили 3 ногу на вход		геркон
 
-			
-
-			//Инициализируем переменные в памяти
-			RCALL InitMemory
 			//Запускаем таймер на каждую мс
 			SetTask TS_Evry_1_ms_Task
 			//Запускаем таймер на каждые 40 мс
@@ -377,6 +376,10 @@ Flush:		ST 		Z+,R16
 			STI Clock+7, '0'
 			//Запустить обновление погоды
 			SetTask TS_WetherInit
+			//Прочитали текущее состояние входа
+			SetTask TS_I
+			//Начали поездку с нуля
+			SetTask TS_RestartTrip
 
 			_LDI_32 WheelLength, 2000
 
@@ -404,17 +407,22 @@ Main:
 ;=============================================================================
 ;Taskss
 ;=============================================================================
-Idle:		
-	LDI_A 65531
-	LDI_32 B_32, 25
-	MUL64_A_R32 B_32
+//Задача на каждый цикл! То, что пвыполняется после ну каждой выполненной задачи
+Idle:
 RET
 
 //Инициализирует всю память
-InitMemory:
+RestartTrip:
+	CBIFlag isMove
 	_CLR_32 TimeTrip
 	_CLR_32 TimeVOld
+	_CLR_32 Dist
+	_CLR_32 Speed
+	_CLR_32 AverageSpeed
+	_CLR_32 MaxSpeed
 RET
+
+
 
 .CSEG 
 
@@ -439,8 +447,14 @@ LCD_BIG_NUMBER_6:		.DB 0b11000,0b11000,0b11000,0b11000,0b11000,0b11000,0b11111,0
 LCD_BIG_NUMBER_7:		.DB 0b11111,0b11111,0b11000,0b11000,0b11000,0b11000,0b11000,0b11000 // Г
 
 //Данные для подписей строк. Обязательно кончаются 0х00!!!!
-LCD_MAX_V:				.DB "MAX:",0x00
+LCD_MAX_V:				.DB "MAX:",0x00,0x00
 LCD_ODO:				.DB "ODO",0x00
+LCD_TST:				.DB "TST",0x00
+LCD_AVR:				.DB "AVR:",0x00,0x00
+LCD_M_RST:				.DB "St. Trip",0x00,0x00
+LCD_M_C:				.DB "C: ",0x00
+LCD_M_MIN:				.DB "min",0x00
+LCD_M_EXIT:				.DB "save&exit",0x00
 
 
 

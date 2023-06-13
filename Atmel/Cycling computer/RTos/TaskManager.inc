@@ -62,6 +62,9 @@ TaskProcs: 	.dw Idle					; јдрес команды, где находитс¤ 
 			.dw Key_D
 			.equ TS_Key_D			= 26
 
+			.dw RestartTrip
+			.equ TS_RestartTrip		= 27
+
 			
 
 			
