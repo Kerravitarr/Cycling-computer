@@ -192,7 +192,10 @@ ReedSwitch_E:
 		//Мы знаем время оборота в мс или мс/оборот, а нужно в скорость перевести - оборотв/мин. Поэтому надо 60'000 / T 
 		//Обороты в минуту, потому что целочисленное деление
 		_CP_32 B_32, TimeVOld
-		BREQ /*=*/ ReedSwitch_E_max_V
+		BRNE /*!=*/ ReedSwitch_E_nmax_V
+			RJMP ReedSwitch_E_max_V
+		ReedSwitch_E_nmax_V:
+			//Скорость адекватная, по счастью
 			_LDI_A 60000
 			_SUB_32 B_32, TimeVOld
 			_DIV_64_A_DIV_R32 B_32
@@ -200,6 +203,10 @@ ReedSwitch_E:
 			_CP_32 MaxSpeed, Speed
 			BRSH /*>=*/ ReedSwitch_E_not_move
 				_MOV_32 MaxSpeed, Speed
+				_CP_32 MaxSpeedOdo, Speed //Может это максимальная скорость за всё время?! О_О
+				BRSH /*>=*/ ReedSwitch_E_not_move
+					_MOV_32 MaxSpeedOdo, Speed
+				RJMP ReedSwitch_E_not_move
 			RJMP ReedSwitch_E_not_move
 		ReedSwitch_E_max_V:
 			_LDI_32 Speed, 999
@@ -235,16 +242,47 @@ TWI_IO_End:
 			RCALL TWI_IO_End_BME250_Read
 			RJMP TWI_IO_End_end
 		TIE_not_br:
+		
+		CPI		tmp2,EEPROMWriteAdr
+		BRNE	TIE_not_ew
+			RCALL TWI_IO_End_EEPROM_Write
+			RJMP TWI_IO_End_end
+		TIE_not_ew:
+		CPI		tmp2,EEPROMReadAdr
+		BRNE	TIE_not_er
+			RCALL TWI_IO_End_EEPROM_Read
+			RJMP TWI_IO_End_end
+		TIE_not_er:
 
 		TWI_IO_End_end:
 RET
+
 //Файлы драйверов
  .include "TWIDevice/Clock.inc"
- //.include "TWIDevice/EEPROM.inc"
+ .include "TWIDevice/EEPROM.inc"
  .include "TWIDevice/Wether.inc"
+
+
 
 /*Функция, вызывается, если у нас устройство не ответило*/
 TWI_IO_Error:
+		CLI
+			CBIFlag TWI_Busy
+		SEI
+		LDS		tmp2, TWI_IO
+		CPI		tmp2,EEPROMWriteAdr
+		BREQ /*=*/ TIER_EE
+		CPI		tmp2,EEPROMReadAdr
+		BREQ /*=*/ TIER_EE
+			RJMP TIER_not_EE
+		TIER_EE:
+			//Ошибка в EEPROM
+			CALL TWI_IO_ERR_EEPROM
+			RJMP TWI_IO_ERR_end
+		TIER_not_EE:
+
+		TWI_IO_ERR_end:
+		/*
 		LDI 	YL,low(TWI_IO)
 		LDI 	YH,high(TWI_IO)
 		INC		Yl
@@ -264,10 +302,6 @@ TWI_IO_Error:
 		STS		UART_O+1+15,tmp2
 		STS		UART_O+1+16,OSRG
 		SetTask TS_StartUART*/
-
-		CLI
-			CBIFlag TWI_Busy
-		SEI
 RET
 
 UART_End:
@@ -368,75 +402,6 @@ StartTWI:
 		SBIFlag TWI_Busy
 	SEI
 RET
-/*
-EEPROMRead:
-			SBI	PORTB,0		//Охрана записи
-			LDI 	ZL,0
-			LDI 	ZH,0
-			LDI 	tmp2,EEPROMStrSize-1
-			STS 	Eread,tmp2
-
-			OUT 	EEARL,ZL 		; Загружаем адрес нужной ячейки
-			OUT 	EEARH,ZH  		; старший и младший байт адреса
-			sbi  EECR,EERE          ; Запускаем чтение установкой флага на чтение
-			
-			in   OSRG, EEDR          ; Возвращаем результат чтения в нужный регистр
-			LDI 	ZL,low(EEPROMStr)
-			LDI 	ZH,high(EEPROMStr)
-			ST		Z,OSRG
-			SBI 	EECR,EERIE		; Включаем прерывание
-RET*/
-/*
-EEPROMWrite:
-			SBI	PORTB,0		//Охрана записи
-			LDI 	ZL,0
-			LDI 	ZH,0
-			LDI 	tmp2,EEPROMStrSize-1
-			STS 	Ewrite,tmp2
-
-			OUT 	EEARL,ZL 		; Загружаем адрес нужной ячейки
-			OUT 	EEARH,ZH  		; старший и младший байт адреса
-			
-			LDS	OSRG,EEPROMStr
-			
-			OUT 	EEDR,OSRG 		; и сами данные, которые нам нужно загрузить
- 
-			SBI 	EECR,EEMPE 		; взводим предохранитель
-			SBI 	EECR,EEPE 		; записываем байт
-
-			SBI 	EECR,EERIE		; Включаем прерывание
-RET*/
-
-EEPROM_End:
-			/*MOV_32	MaxSpeedOdo,EEPROMStr
-			//MOV_32	Lenght,EEPROMStr+4
-			//			LPM_Z_X PKKLKLJLKHJKH,Lenght,4
-			MOV_32	TimeOdo,EEPROMStr+8
-			MOV_32	Odometr,EEPROMStr+12
-
-			CLR_32 B_2
-			CP_F   B_2,Lenght
-			BRNE /*!=*//* EE_01
-				//У нас длина колеса = 0. Надо запустить процесс инициализации
-				STI Mode,Mode51
-				EORI Flag_1,0b100000//Устанавливаем флаг, что мы инициализиаровали меню
-
-				LDI 	ZL,low(StringOutTwo+(StringOutSize-1))	//Берём первую строку
-				LDI 	ZH,high(StringOutTwo+(StringOutSize-1))	
-				
-				LDI		word,0xFF			//Первый символ превращается в чёрный кубик
-				ST		Z,word
-				LDI		word,9				//Мигает 8 символ
-				ST		-Z,word
-				LDI		word,'0'				//Оригинал символа далее
-				ST		-Z,word
-				LDI		word,2				//Мигает вторая строка
-				STS		StringOutOne+(StringOutSize-1)-3,word
-
-				SetTimerTask TS_ScreenBlink,250
-			EE_01:*/
-RET
-
 
 
 //Печать символа. 

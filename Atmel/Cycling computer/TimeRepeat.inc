@@ -607,7 +607,7 @@ WetherUpdate:
 		STI TWI_IO+1, BME_ADR_status //Читать будем от статуса и далее
 		STI TWI_IOl, 2 ;Записываем 2 регистра - адрес и чтение будем осуществлять с 0
 		CALL StartTWI
-		SetTimerTask TS_WetherUpdate,1000//Один раз в минуту обновляться - за глаза и за уши!
+		SetTimerTask TS_WetherUpdate,10000//Один раз в 10 секунд обновляться - за глаза и за уши!
 		RET
 	WU00:
 	//Линия занята, обратитесь позже*

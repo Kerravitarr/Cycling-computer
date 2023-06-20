@@ -7,7 +7,7 @@
  TWI_IO_End_Clock_Write:
 	STI	TWI_IO, DS1307Read
 	STI	TWI_IOl, 7
-	RCALL StartTWI
+	CALL StartTWI
 RET
 
  TWI_IO_End_Clock_Read:

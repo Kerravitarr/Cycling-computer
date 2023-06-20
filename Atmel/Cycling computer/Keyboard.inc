@@ -38,6 +38,12 @@
 			STI LCD_display_mode, DM_DEFAULT
 			RJMP Key_E_ret
 		Key_E_not_exit:
+		CPI tmp2, DM_MENU_EEPROM_CL
+		BRNE /*!=*/ Key_E_not_eeclr
+			SetTask TS_EEPROM_CLR
+			STI LCD_display_mode, DM_DEFAULT
+			RJMP Key_E_ret
+		Key_E_not_eeclr:
 
 	Key_E_ret:
  RET
@@ -122,6 +128,30 @@
 				_ADD_32 LeftTimeDist, ACC_32
 				RET 
 		Key_UP_not_TT:
+		
+		CPI tmp2, DM_MENU_WheelLength
+		BRNE /*!=*/ Key_UP_not_WL
+			//Длина колеса
+			CPI tmp3, 3
+			BRNE /*!=*/ Key_UP_WLnot3
+				_LDI_32 B_32, 1000 //+= 1000мм
+				RJMP Key_UP_WLadd
+			Key_UP_WLnot3:
+			CPI tmp3, 4
+			BRNE /*!=*/ Key_UP_WLnot4
+				_LDI_32 B_32, 100 //+= 100мм
+				RJMP Key_UP_WLadd
+			Key_UP_WLnot4:
+			CPI tmp3, 5
+			BRNE /*!=*/ Key_UP_WLnot5
+				_LDI_32 B_32, 10 //+= 10мм
+				RJMP Key_UP_WLadd
+			Key_UP_WLnot5:
+				_LDI_32 B_32, 1 //+= 1мм
+			Key_UP_WLadd:
+			_ADD_32 WheelLength, B_32
+			RET
+		Key_UP_not_WL:
  RET
  
  //Нажали кнопку вниз
@@ -217,7 +247,34 @@
 				Key_D_TT_not_t_ret:
 				RET 
 		Key_D_not_TT:
-
+		CPI tmp2, DM_MENU_WheelLength
+		BRNE /*!=*/ Key_D_not_WL
+			//Длина колеса
+			CPI tmp3, 3
+			BRNE /*!=*/ Key_D_WLnot3
+				_LDI_32 B_32, 1000 //-= 1000мм
+				RJMP Key_D_WLsub
+			Key_D_WLnot3:
+			CPI tmp3, 4
+			BRNE /*!=*/ Key_D_WLnot4
+				_LDI_32 B_32, 100 //-= 100мм
+				RJMP Key_D_WLsub
+			Key_D_WLnot4:
+			CPI tmp3, 5
+			BRNE /*!=*/ Key_D_WLnot5
+				_LDI_32 B_32, 10 //-= 10мм
+				RJMP Key_D_WLsub
+			Key_D_WLnot5:
+				_LDI_32 B_32, 1 //-= 1мм
+			Key_D_WLsub:
+			_SUB_32 WheelLength, B_32
+			_TST_32 WheelLength
+			BRPL /*+*/ Key_D_WL_ret
+				//Не может быть отрицательным!
+				_CLR_32 WheelLength
+			Key_D_WL_ret:
+			RET
+		Key_D_not_WL:
  RET
 
  //Нажали кнопку вправо
@@ -269,6 +326,29 @@
 			STI LCD_cursor_pos, 5
 			RET
 	Key_R_not_TT:
+
+	CPI tmp2, DM_MENU_WheelLength
+	BRNE /*!=*/ Key_R_not_WL
+		//Длина колеса
+		CPI tmp3, 0
+		BRNE /*!=*/ Key_R_WL_not0
+			STI LCD_cursor_pos, 3
+			RET
+		Key_R_WL_not0:
+		CPI tmp3, 3
+		BRNE /*!=*/ Key_R_WL_not3
+			STI LCD_cursor_pos, 4
+			RET
+		Key_R_WL_not3:
+		CPI tmp3, 4
+		BRNE /*!=*/ Key_R_WL_not4
+			STI LCD_cursor_pos, 5
+			RET
+		Key_R_WL_not4:
+		STI LCD_cursor_pos, 6
+		RET
+	Key_R_not_WL:
+	
  RET
 
  //Нажали кнопку влево
@@ -312,4 +392,28 @@
 				STI LCD_cursor_pos, 0
 				RET
 	Key_L_not_TT:
+
+	CPI tmp2, DM_MENU_WheelLength
+	BRNE /*!=*/ Key_L_not_WL
+		//Длина колеса
+		CPI tmp3, 6
+		BRNE /*!=*/ Key_L_WL_not6
+			STI LCD_cursor_pos, 5
+			RET
+		Key_L_WL_not6:
+		CPI tmp3, 5
+		BRNE /*!=*/ Key_L_WL_not5
+			STI LCD_cursor_pos, 4
+			RET
+		Key_L_WL_not5:
+		CPI tmp3, 4
+		BRNE /*!=*/ Key_L_WL_not4
+			STI LCD_cursor_pos, 3
+			RET
+		Key_L_WL_not4:
+		//Возвращаем курсор на старт и сохраняем значение в память
+		STI LCD_cursor_pos, 0
+		SetTask TS_EEPROM_SET
+		RET
+	Key_L_not_WL:
  RET

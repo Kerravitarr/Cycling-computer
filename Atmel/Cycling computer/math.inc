@@ -65,6 +65,9 @@
 //Тестирует число @0. Устанавливает флаг +- и 0
 .MACRO		_TST_32
 
+//Вычисляет СRC8. Macro = CRC8(Data: @0, Lenght: @1)
+.MACRO		_CRC8
+
  */
 /**
 Копирует число в памяти из Yh:Yl в Xh:Xl 
@@ -264,6 +267,50 @@ TST_M:
 	TST_Mend:
 	POP tmp2
 RET
+
+//Функция вычисляет CRC
+//Х - указатель на начало текста
+//MacroR - количество байт
+//Выход: MacroR - рассчитанное CRC
+CRC_8_M:
+	//Инициализация
+	.equ CRC_INIT = 0x00
+	//Полином: 0x31    x^8 + x^5 + x^4 + 1
+	.equ CRC_POLY = 0x31
+	
+	PUSH tmp2
+	PUSH tmp3
+	PUSH tmp4
+	PUSHW X
+		//Это наш СРС
+		LDI tmp2, CRC_INIT
+		//Это наш полином
+		LDI tmp4, CRC_POLY
+		CRC_8_M_dataL:
+			LD tmp3, X+
+			EOR tmp2, tmp3 //crc ^= *DATA++;
+			LDI tmp3, 8
+
+			CRC_8_M_byteL:
+				LSL tmp2 //crc << 1 и старший бит, то есть crc & 0x80, в С
+				BRCC /*C == 0*/ CRC_8_M_crcNotPoli
+					//C == 1 => crc & 0x80 == true
+					EOR tmp2, tmp4 //(crc << 1) ^ CRC_POLY
+				CRC_8_M_crcNotPoli:
+				DEC tmp3
+			BRNE /*!=*/ CRC_8_M_byteL
+
+			DEC MacroR
+		BRNE /*!=*/ CRC_8_M_dataL
+		MOV MacroR, tmp2
+	POPW X
+	POP tmp4
+	POP tmp3
+	POP tmp2
+
+RET
+
+
 ;=============================================================================
 ;=============================================================================
 ;=============================================================================
@@ -895,6 +942,22 @@ RET
 	POP		XH
 	POP		XL
 .ENDMACRO
+
+.MACRO		_CRC8
+	LDI		MacroR,@1
+   	LDIW 	X,@0
+	CALL	CRC_8_M
+.ENDMACRO
+.MACRO		CRC8
+	PUSHW	X 
+
+	_CRC8 @0, @1
+
+	POPW	X
+.ENDMACRO
+
+
+
 
 //Деление 64х разрядного числа
 .include "Math/DIV_64.inc"

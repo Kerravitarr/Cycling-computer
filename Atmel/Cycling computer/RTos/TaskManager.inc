@@ -64,10 +64,14 @@ TaskProcs: 	.dw Idle					; јдрес команды, где находитс¤ 
 
 			.dw RestartTrip
 			.equ TS_RestartTrip		= 27
-
-			
-
-			
+			.dw EEPROM_CLR
+			.equ TS_EEPROM_CLR		= 28
+			.dw EEPROM_Read
+			.equ TS_EEPROM_Read		= 29
+			.dw EEPROM_SET
+			.equ TS_EEPROM_SET		= 30
+			.dw EEPROM_STEP
+			.equ TS_EEPROM_STEP		= 31
 
 			
 			
